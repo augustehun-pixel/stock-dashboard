@@ -18,6 +18,12 @@
   border-radius: 4px;
 }
 
+.add-error {
+  color: #c0392b;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
 .stock-card {
   background: #ffffff;
   border: 1px solid #e0e0e0;

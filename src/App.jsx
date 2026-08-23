@@ -7,12 +7,17 @@ const initialStocks = [
   { id: '035420', name: 'NAVER', code: '035420', price: '210,000원', changeRate: '+0.45%' },
 ]
 
-async function fetchStockData(name) {
+async function fetchStockData(code) {
+  const response = await fetch(`/api/stock/${code}`)
+  if (!response.ok) {
+    throw new Error('종목 정보를 가져오지 못했습니다')
+  }
+  const data = await response.json()
   return {
-    id: Date.now().toString(),
-    name,
-    code: '-',
-    price: '-',
+    id: data.code,
+    name: data.name,
+    code: data.code,
+    price: `${Number(data.price).toLocaleString()}원`,
     changeRate: '+0.00%',
   }
 }
@@ -22,6 +27,8 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('')
   const [newStockName, setNewStockName] = useState('')
   const [samsungStatus, setSamsungStatus] = useState('loading')
+  const [isAdding, setIsAdding] = useState(false)
+  const [addError, setAddError] = useState('')
 
   useEffect(() => {
     async function loadSamsungPrice() {
@@ -62,10 +69,29 @@ function App() {
   }
 
   async function handleAdd() {
-    if (newStockName.trim() === '') return
-    const newStock = await fetchStockData(newStockName)
-    setStocks([...stocks, newStock])
-    setNewStockName('')
+    const code = newStockName.trim()
+    setAddError('')
+
+    if (!/^\d{6}$/.test(code)) {
+      setAddError('6자리 종목코드를 입력해주세요.')
+      return
+    }
+
+    if (stocks.some((stock) => stock.code === code)) {
+      setAddError('이미 추가된 종목입니다.')
+      return
+    }
+
+    setIsAdding(true)
+    try {
+      const newStock = await fetchStockData(code)
+      setStocks((prevStocks) => [...prevStocks, newStock])
+      setNewStockName('')
+    } catch {
+      setAddError('종목 정보를 가져오지 못했습니다. 종목코드를 확인해주세요.')
+    } finally {
+      setIsAdding(false)
+    }
   }
 
   return (
@@ -82,14 +108,15 @@ function App() {
         <input
           type="text"
           className="add-stock-input"
-          placeholder="추가할 종목 이름"
+          placeholder="추가할 종목코드 (6자리)"
           value={newStockName}
           onChange={(e) => setNewStockName(e.target.value)}
         />
-        <button type="button" onClick={handleAdd}>
-          추가
+        <button type="button" onClick={handleAdd} disabled={isAdding}>
+          {isAdding ? '추가 중...' : '추가'}
         </button>
       </div>
+      {addError && <p className="add-error">{addError}</p>}
       {filteredStocks.map((stock) => {
         const isSamsung = stock.id === '005930'
 
