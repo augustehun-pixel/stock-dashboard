@@ -146,87 +146,115 @@ function App() {
   }
 
   return (
-    <>
-      <h1>Hello Stock Dashboard</h1>
-      <input
-        type="text"
-        className="search-input"
-        placeholder="종목 이름 또는 코드 검색"
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-      />
-      <div className="add-stock-form">
+    <div className="app-shell">
+      <header className="app-header">
+        <h1>주식 시장 대시보드</h1>
+      </header>
+
+      <section className="panel search-section">
         <input
           type="text"
-          className="add-stock-input"
-          placeholder="추가할 종목 이름 또는 코드 검색"
-          value={addQuery}
-          onChange={(e) => setAddQuery(e.target.value)}
+          className="search-input"
+          placeholder="종목 이름 또는 코드 검색"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
         />
-      </div>
-      {searchResults.length > 0 && (
-        <ul className="search-results">
-          {searchResults.map((result) => (
-            <li key={result.symbol}>
-              <button
-                type="button"
-                onClick={() => handlePickResult(result)}
-                disabled={isAdding}
-              >
-                {result.name} ({result.symbol})
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {addError && <p className="add-error">{addError}</p>}
-      {isLoadingInitial ? (
-        <p>불러오는 중...</p>
-      ) : (
-        filteredStocks.map((stock) => {
-          if (stock.status === 'error') {
-            return (
-              <div className="stock-card" key={stock.id}>
-                <p>{stock.name} ({stock.code})</p>
-                <p>가격 정보를 불러오지 못했습니다</p>
-                <button type="button" onClick={() => handleDelete(stock.id)}>
-                  삭제
+      </section>
+
+      <section className="panel add-section">
+        <h2>종목 추가</h2>
+        <div className="add-stock-form">
+          <input
+            type="text"
+            className="add-stock-input"
+            placeholder="추가할 종목 이름 또는 코드 검색"
+            value={addQuery}
+            onChange={(e) => setAddQuery(e.target.value)}
+          />
+        </div>
+        {searchResults.length > 0 && (
+          <ul className="search-results">
+            {searchResults.map((result) => (
+              <li key={result.symbol}>
+                <button
+                  type="button"
+                  onClick={() => handlePickResult(result)}
+                  disabled={isAdding}
+                >
+                  <span className="search-result-plus">+</span>
+                  {result.name} ({result.symbol})
                 </button>
-              </div>
-            )
-          }
+              </li>
+            ))}
+          </ul>
+        )}
+        {addError && <p className="add-error">{addError}</p>}
+      </section>
 
-          const rate = stock.changeRate === null ? null : parseFloat(stock.changeRate)
-          const isBigMove = rate !== null && Math.abs(rate) >= 1
+      <section className="panel watchlist-section">
+        <div className="watchlist-header">
+          <h2>관심종목</h2>
+          <span className="watchlist-count">{stocks.length}개</span>
+        </div>
 
-          let changeClass = 'neutral'
-          let arrow = '→'
-          if (rate === null) {
-            changeClass = 'neutral'
-          } else if (rate > 0) {
-            changeClass = 'positive'
-            arrow = '↑'
-          } else if (rate < 0) {
-            changeClass = 'negative'
-            arrow = '↓'
-          }
+        {isLoadingInitial ? (
+          <p className="status-message">불러오는 중...</p>
+        ) : (
+          <div className="stock-grid">
+            {filteredStocks.map((stock) => {
+              if (stock.status === 'error') {
+                return (
+                  <div className="stock-card" key={stock.id}>
+                    <p className="stock-name">{stock.name} ({stock.code})</p>
+                    <p className="stock-error">가격 정보를 불러오지 못했습니다</p>
+                    <button
+                      type="button"
+                      className="delete-button"
+                      onClick={() => handleDelete(stock.id)}
+                    >
+                      삭제
+                    </button>
+                  </div>
+                )
+              }
 
-          return (
-            <div className="stock-card" key={stock.id}>
-              <p>{stock.name} ({stock.code})</p>
-              <p>{stock.price}</p>
-              <p className={changeClass}>
-                {rate === null ? '등락률 정보 없음' : `${arrow} ${stock.changeRate}`}
-              </p>
-              {isBigMove && <p className="big-move-tag">큰 변동</p>}
-              <button type="button" onClick={() => handleDelete(stock.id)}>
-                삭제
-              </button>
-            </div>
-          )
-        })
-      )}
-    </>
+              const rate = stock.changeRate === null ? null : parseFloat(stock.changeRate)
+              const isBigMove = rate !== null && Math.abs(rate) >= 1
+
+              let changeClass = 'neutral'
+              let arrow = '→'
+              if (rate === null) {
+                changeClass = 'neutral'
+              } else if (rate > 0) {
+                changeClass = 'positive'
+                arrow = '↑'
+              } else if (rate < 0) {
+                changeClass = 'negative'
+                arrow = '↓'
+              }
+
+              return (
+                <div className="stock-card" key={stock.id}>
+                  <p className="stock-name">{stock.name} ({stock.code})</p>
+                  <p className="stock-price">{stock.price}</p>
+                  <p className={`stock-change ${changeClass}`}>
+                    {rate === null ? '등락률 정보 없음' : `${arrow} ${stock.changeRate}`}
+                  </p>
+                  {isBigMove && <p className="big-move-tag">큰 변동</p>}
+                  <button
+                    type="button"
+                    className="delete-button"
+                    onClick={() => handleDelete(stock.id)}
+                  >
+                    삭제
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+    </div>
   )
 }
 
