@@ -152,6 +152,13 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  cursor: pointer;
+}
+
+.stock-card:hover,
+.stock-card:focus-visible {
+  border-color: #90c2ff;
+  outline: none;
 }
 
 .stock-name {
@@ -213,6 +220,116 @@
   background: #fdf1f1;
   border-color: #e6b3b3;
   color: #c0392b;
+}
+
+.stock-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+  z-index: 100;
+}
+
+.stock-detail-modal {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+}
+
+.stock-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stock-detail-header h2 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.stock-detail-code {
+  font-size: 14px;
+  font-weight: 400;
+  color: #666;
+}
+
+.stock-detail-market {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.stock-detail-close {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 16px;
+  color: #555;
+  flex-shrink: 0;
+}
+
+.stock-detail-close:hover {
+  background: #f5f5f5;
+}
+
+.stock-detail-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.stock-detail-price {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.stock-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+.stock-detail-grid div {
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.stock-detail-grid dt {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.stock-detail-grid dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.stock-detail-timestamp {
+  font-size: 12px;
+  color: #999;
+  margin: 0;
 }
 
 @media (max-width: 480px) {

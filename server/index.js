@@ -100,6 +100,7 @@ async function getStockInfo(accessToken, code) {
   }
 
   // candles[0] = 오늘, candles[1] = 어제(전일 종가) - 최신순 정렬
+  const todayCandle = candles[0] ?? null
   const previousClose = candles[1] ? Number(candles[1].closePrice) : null
   const lastPrice = Number(price.lastPrice)
   const changeRate =
@@ -110,10 +111,17 @@ async function getStockInfo(accessToken, code) {
   return {
     code: stock.symbol,
     name: stock.name,
+    englishName: stock.englishName ?? null,
+    market: stock.market ?? null,
     price: price.lastPrice,
     currency: price.currency,
     timestamp: price.timestamp,
     changeRate,
+    // 상세보기에서 쓰는 당일 시가/고가/저가/거래량. 오늘자 캔들이 아직 없으면(예: 장 시작 전) null.
+    openPrice: todayCandle ? todayCandle.openPrice : null,
+    highPrice: todayCandle ? todayCandle.highPrice : null,
+    lowPrice: todayCandle ? todayCandle.lowPrice : null,
+    volume: todayCandle ? todayCandle.volume : null,
   }
 }
 

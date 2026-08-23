@@ -34,6 +34,38 @@ function formatChangeRate(rate) {
   return `${sign}${rate.toFixed(2)}%`
 }
 
+// 카드와 상세보기 모두에서 등락률에 따른 색상/화살표를 같은 방식으로 계산한다.
+function getChangeDisplay(changeRate) {
+  const rate = changeRate === null || changeRate === undefined ? null : parseFloat(changeRate)
+  let changeClass = 'neutral'
+  let arrow = '→'
+  if (rate > 0) {
+    changeClass = 'positive'
+    arrow = '↑'
+  } else if (rate < 0) {
+    changeClass = 'negative'
+    arrow = '↓'
+  }
+  return { rate, changeClass, arrow }
+}
+
+function formatPriceValue(value) {
+  if (value === null || value === undefined) return '정보 없음'
+  return `${Number(value).toLocaleString()}원`
+}
+
+function formatVolumeValue(value) {
+  if (value === null || value === undefined) return '정보 없음'
+  return `${Number(value).toLocaleString()}주`
+}
+
+function formatTimestamp(value) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleString('ko-KR')
+}
+
 async function fetchStockData(code) {
   const response = await fetch(`/api/stock/${code}`)
   if (!response.ok) {
@@ -44,8 +76,14 @@ async function fetchStockData(code) {
     id: data.code,
     name: data.name,
     code: data.code,
+    market: data.market ?? null,
     price: `${Number(data.price).toLocaleString()}원`,
     changeRate: formatChangeRate(data.changeRate),
+    openPrice: data.openPrice,
+    highPrice: data.highPrice,
+    lowPrice: data.lowPrice,
+    volume: data.volume,
+    timestamp: data.timestamp,
     status: 'success',
   }
 }
@@ -58,6 +96,16 @@ function App() {
   const [searchResults, setSearchResults] = useState([])
   const [isAdding, setIsAdding] = useState(false)
   const [addError, setAddError] = useState('')
+  const [selectedStock, setSelectedStock] = useState(null)
+
+  useEffect(() => {
+    if (!selectedStock) return
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') setSelectedStock(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedStock])
 
   useEffect(() => {
     async function loadInitialStocks() {
@@ -112,12 +160,25 @@ function App() {
     )
   })
 
-  function handleDelete(id) {
+  function handleDelete(id, e) {
+    e.stopPropagation()
     setStocks((prevStocks) => {
       const updated = prevStocks.filter((stock) => stock.id !== id)
       saveWatchlistCodes(updated.map((stock) => stock.code))
       return updated
     })
+    setSelectedStock((prev) => (prev && prev.id === id ? null : prev))
+  }
+
+  function handleSelectStock(stock) {
+    setSelectedStock(stock)
+  }
+
+  function handleCardKeyDown(e, stock) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleSelectStock(stock)
+    }
   }
 
   async function handlePickResult(result) {
@@ -204,13 +265,20 @@ function App() {
             {filteredStocks.map((stock) => {
               if (stock.status === 'error') {
                 return (
-                  <div className="stock-card" key={stock.id}>
+                  <div
+                    className="stock-card"
+                    key={stock.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleSelectStock(stock)}
+                    onKeyDown={(e) => handleCardKeyDown(e, stock)}
+                  >
                     <p className="stock-name">{stock.name} ({stock.code})</p>
                     <p className="stock-error">가격 정보를 불러오지 못했습니다</p>
                     <button
                       type="button"
                       className="delete-button"
-                      onClick={() => handleDelete(stock.id)}
+                      onClick={(e) => handleDelete(stock.id, e)}
                     >
                       삭제
                     </button>
@@ -218,23 +286,18 @@ function App() {
                 )
               }
 
-              const rate = stock.changeRate === null ? null : parseFloat(stock.changeRate)
+              const { rate, changeClass, arrow } = getChangeDisplay(stock.changeRate)
               const isBigMove = rate !== null && Math.abs(rate) >= 1
 
-              let changeClass = 'neutral'
-              let arrow = '→'
-              if (rate === null) {
-                changeClass = 'neutral'
-              } else if (rate > 0) {
-                changeClass = 'positive'
-                arrow = '↑'
-              } else if (rate < 0) {
-                changeClass = 'negative'
-                arrow = '↓'
-              }
-
               return (
-                <div className="stock-card" key={stock.id}>
+                <div
+                  className="stock-card"
+                  key={stock.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleSelectStock(stock)}
+                  onKeyDown={(e) => handleCardKeyDown(e, stock)}
+                >
                   <p className="stock-name">{stock.name} ({stock.code})</p>
                   <p className="stock-price">{stock.price}</p>
                   <p className={`stock-change ${changeClass}`}>
@@ -244,7 +307,7 @@ function App() {
                   <button
                     type="button"
                     className="delete-button"
-                    onClick={() => handleDelete(stock.id)}
+                    onClick={(e) => handleDelete(stock.id, e)}
                   >
                     삭제
                   </button>
@@ -254,6 +317,78 @@ function App() {
           </div>
         )}
       </section>
+
+      {selectedStock && (
+        <div className="stock-detail-backdrop" onClick={() => setSelectedStock(null)}>
+          <div
+            className="stock-detail-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${selectedStock.name} 상세 정보`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="stock-detail-header">
+              <div>
+                <h2>
+                  {selectedStock.name} <span className="stock-detail-code">({selectedStock.code})</span>
+                </h2>
+                {selectedStock.market && <p className="stock-detail-market">{selectedStock.market}</p>}
+              </div>
+              <button
+                type="button"
+                className="stock-detail-close"
+                onClick={() => setSelectedStock(null)}
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+
+            {selectedStock.status === 'error' ? (
+              <p className="stock-error">가격 정보를 불러오지 못했습니다</p>
+            ) : (
+              (() => {
+                const { rate, changeClass, arrow } = getChangeDisplay(selectedStock.changeRate)
+                return (
+                  <>
+                    <div className="stock-detail-price-row">
+                      <span className="stock-detail-price">{selectedStock.price}</span>
+                      <span className={`stock-change ${changeClass}`}>
+                        {rate === null ? '등락률 정보 없음' : `${arrow} ${selectedStock.changeRate}`}
+                      </span>
+                    </div>
+
+                    <dl className="stock-detail-grid">
+                      <div>
+                        <dt>시가</dt>
+                        <dd>{formatPriceValue(selectedStock.openPrice)}</dd>
+                      </div>
+                      <div>
+                        <dt>고가</dt>
+                        <dd>{formatPriceValue(selectedStock.highPrice)}</dd>
+                      </div>
+                      <div>
+                        <dt>저가</dt>
+                        <dd>{formatPriceValue(selectedStock.lowPrice)}</dd>
+                      </div>
+                      <div>
+                        <dt>거래량</dt>
+                        <dd>{formatVolumeValue(selectedStock.volume)}</dd>
+                      </div>
+                    </dl>
+
+                    {formatTimestamp(selectedStock.timestamp) && (
+                      <p className="stock-detail-timestamp">
+                        기준 시각: {formatTimestamp(selectedStock.timestamp)}
+                      </p>
+                    )}
+                  </>
+                )
+              })()
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
