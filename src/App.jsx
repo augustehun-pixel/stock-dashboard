@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 
 const initialStocks = [
@@ -21,6 +21,33 @@ function App() {
   const [stocks, setStocks] = useState(initialStocks)
   const [searchTerm, setSearchTerm] = useState('')
   const [newStockName, setNewStockName] = useState('')
+  const [samsungStatus, setSamsungStatus] = useState('loading')
+
+  useEffect(() => {
+    async function loadSamsungPrice() {
+      try {
+        const response = await fetch('/api/stock/005930')
+        if (!response.ok) throw new Error('요청 실패')
+        const data = await response.json()
+        setStocks((prevStocks) =>
+          prevStocks.map((stock) =>
+            stock.id === '005930'
+              ? {
+                  ...stock,
+                  name: data.name,
+                  code: data.code,
+                  price: `${Number(data.price).toLocaleString()}원`,
+                }
+              : stock,
+          ),
+        )
+        setSamsungStatus('success')
+      } catch {
+        setSamsungStatus('error')
+      }
+    }
+    loadSamsungPrice()
+  }, [])
 
   const filteredStocks = stocks.filter((stock) => {
     const keyword = searchTerm.toLowerCase()
@@ -64,6 +91,32 @@ function App() {
         </button>
       </div>
       {filteredStocks.map((stock) => {
+        const isSamsung = stock.id === '005930'
+
+        if (isSamsung && samsungStatus === 'loading') {
+          return (
+            <div className="stock-card" key={stock.id}>
+              <p>{stock.name} ({stock.code})</p>
+              <p>불러오는 중...</p>
+              <button type="button" onClick={() => handleDelete(stock.id)}>
+                삭제
+              </button>
+            </div>
+          )
+        }
+
+        if (isSamsung && samsungStatus === 'error') {
+          return (
+            <div className="stock-card" key={stock.id}>
+              <p>{stock.name} ({stock.code})</p>
+              <p>가격 정보를 불러오지 못했습니다</p>
+              <button type="button" onClick={() => handleDelete(stock.id)}>
+                삭제
+              </button>
+            </div>
+          )
+        }
+
         const isNegative = stock.changeRate.startsWith('-')
         const isBigMove = Math.abs(parseFloat(stock.changeRate)) >= 1
         return (
