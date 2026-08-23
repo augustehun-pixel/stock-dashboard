@@ -7,6 +7,12 @@ const initialStocks = [
   { id: '035420', name: 'NAVER', code: '035420', price: '210,000원', changeRate: '+0.45%' },
 ]
 
+function formatChangeRate(rate) {
+  if (rate === null || rate === undefined) return null
+  const sign = rate > 0 ? '+' : ''
+  return `${sign}${rate.toFixed(2)}%`
+}
+
 async function fetchStockData(code) {
   const response = await fetch(`/api/stock/${code}`)
   if (!response.ok) {
@@ -18,7 +24,7 @@ async function fetchStockData(code) {
     name: data.name,
     code: data.code,
     price: `${Number(data.price).toLocaleString()}원`,
-    changeRate: '+0.00%',
+    changeRate: formatChangeRate(data.changeRate),
   }
 }
 
@@ -44,6 +50,7 @@ function App() {
                   name: data.name,
                   code: data.code,
                   price: `${Number(data.price).toLocaleString()}원`,
+                  changeRate: formatChangeRate(data.changeRate),
                 }
               : stock,
           ),
@@ -144,14 +151,27 @@ function App() {
           )
         }
 
-        const isNegative = stock.changeRate.startsWith('-')
-        const isBigMove = Math.abs(parseFloat(stock.changeRate)) >= 1
+        const rate = stock.changeRate === null ? null : parseFloat(stock.changeRate)
+        const isBigMove = rate !== null && Math.abs(rate) >= 1
+
+        let changeClass = 'neutral'
+        let arrow = '→'
+        if (rate === null) {
+          changeClass = 'neutral'
+        } else if (rate > 0) {
+          changeClass = 'positive'
+          arrow = '↑'
+        } else if (rate < 0) {
+          changeClass = 'negative'
+          arrow = '↓'
+        }
+
         return (
           <div className="stock-card" key={stock.id}>
             <p>{stock.name} ({stock.code})</p>
             <p>{stock.price}</p>
-            <p className={isNegative ? 'negative' : 'positive'}>
-              {isNegative ? '↓' : '↑'} {stock.changeRate}
+            <p className={changeClass}>
+              {rate === null ? '등락률 정보 없음' : `${arrow} ${stock.changeRate}`}
             </p>
             {isBigMove && <p className="big-move-tag">큰 변동</p>}
             <button type="button" onClick={() => handleDelete(stock.id)}>

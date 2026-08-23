@@ -40,6 +40,10 @@
   color: blue;
 }
 
+.neutral {
+  color: #555;
+}
+
 .big-move-tag {
   display: inline-block;
   font-size: 12px;

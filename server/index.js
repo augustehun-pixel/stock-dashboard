@@ -25,9 +25,12 @@ async function getTossAccessToken() {
 async function getStockInfo(accessToken, code) {
   const authHeader = { Authorization: `Bearer ${accessToken}` }
 
-  const [priceRes, stockRes] = await Promise.all([
+  const [priceRes, stockRes, candleRes] = await Promise.all([
     fetch(`${TOSS_API_BASE}/api/v1/prices?symbols=${code}`, { headers: authHeader }),
     fetch(`${TOSS_API_BASE}/api/v1/stocks?symbols=${code}`, { headers: authHeader }),
+    fetch(`${TOSS_API_BASE}/api/v1/candles?symbol=${code}&interval=1d&count=2`, {
+      headers: authHeader,
+    }),
   ])
 
   if (!priceRes.ok) {
@@ -36,16 +39,29 @@ async function getStockInfo(accessToken, code) {
   if (!stockRes.ok) {
     throw new Error(`종목 정보 조회 실패 (HTTP ${stockRes.status})`)
   }
+  if (!candleRes.ok) {
+    throw new Error(`시세 이력 조회 실패 (HTTP ${candleRes.status})`)
+  }
 
   const priceData = await priceRes.json()
   const stockData = await stockRes.json()
+  const candleData = await candleRes.json()
 
   const price = priceData.result?.[0]
   const stock = stockData.result?.[0]
+  const candles = candleData.result?.candles ?? []
 
   if (!price || !stock) {
     throw new Error('해당 종목 정보를 찾을 수 없음')
   }
+
+  // candles[0] = 오늘, candles[1] = 어제(전일 종가) - 최신순 정렬
+  const previousClose = candles[1] ? Number(candles[1].closePrice) : null
+  const lastPrice = Number(price.lastPrice)
+  const changeRate =
+    previousClose && previousClose !== 0
+      ? Math.round(((lastPrice - previousClose) / previousClose) * 10000) / 100
+      : null
 
   return {
     code: stock.symbol,
@@ -53,6 +69,7 @@ async function getStockInfo(accessToken, code) {
     price: price.lastPrice,
     currency: price.currency,
     timestamp: price.timestamp,
+    changeRate,
   }
 }
 
