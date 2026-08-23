@@ -29,7 +29,8 @@ function App() {
   const [stocks, setStocks] = useState([])
   const [isLoadingInitial, setIsLoadingInitial] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [newStockName, setNewStockName] = useState('')
+  const [addQuery, setAddQuery] = useState('')
+  const [searchResults, setSearchResults] = useState([])
   const [isAdding, setIsAdding] = useState(false)
   const [addError, setAddError] = useState('')
 
@@ -58,6 +59,27 @@ function App() {
     loadInitialStocks()
   }, [])
 
+  useEffect(() => {
+    const keyword = addQuery.trim()
+    if (!keyword) {
+      setSearchResults([])
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/stocks/search?q=${encodeURIComponent(keyword)}`)
+        if (!response.ok) throw new Error('검색 실패')
+        const data = await response.json()
+        setSearchResults(data.result ?? [])
+      } catch {
+        setSearchResults([])
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [addQuery])
+
   const filteredStocks = stocks.filter((stock) => {
     const keyword = searchTerm.toLowerCase()
     return (
@@ -70,27 +92,22 @@ function App() {
     setStocks(stocks.filter((stock) => stock.id !== id))
   }
 
-  async function handleAdd() {
-    const code = newStockName.trim()
+  async function handlePickResult(result) {
     setAddError('')
 
-    if (!/^\d{6}$/.test(code)) {
-      setAddError('6자리 종목코드를 입력해주세요.')
-      return
-    }
-
-    if (stocks.some((stock) => stock.code === code)) {
+    if (stocks.some((stock) => stock.code === result.symbol)) {
       setAddError('이미 추가된 종목입니다.')
       return
     }
 
     setIsAdding(true)
     try {
-      const newStock = await fetchStockData(code)
+      const newStock = await fetchStockData(result.symbol)
       setStocks((prevStocks) => [...prevStocks, newStock])
-      setNewStockName('')
+      setAddQuery('')
+      setSearchResults([])
     } catch {
-      setAddError('종목 정보를 가져오지 못했습니다. 종목코드를 확인해주세요.')
+      setAddError('종목 정보를 가져오지 못했습니다.')
     } finally {
       setIsAdding(false)
     }
@@ -110,14 +127,26 @@ function App() {
         <input
           type="text"
           className="add-stock-input"
-          placeholder="추가할 종목코드 (6자리)"
-          value={newStockName}
-          onChange={(e) => setNewStockName(e.target.value)}
+          placeholder="추가할 종목 이름 또는 코드 검색"
+          value={addQuery}
+          onChange={(e) => setAddQuery(e.target.value)}
         />
-        <button type="button" onClick={handleAdd} disabled={isAdding}>
-          {isAdding ? '추가 중...' : '추가'}
-        </button>
       </div>
+      {searchResults.length > 0 && (
+        <ul className="search-results">
+          {searchResults.map((result) => (
+            <li key={result.symbol}>
+              <button
+                type="button"
+                onClick={() => handlePickResult(result)}
+                disabled={isAdding}
+              >
+                {result.name} ({result.symbol})
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {addError && <p className="add-error">{addError}</p>}
       {isLoadingInitial ? (
         <p>불러오는 중...</p>

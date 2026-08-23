@@ -18,6 +18,30 @@
   border-radius: 4px;
 }
 
+.search-results {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.search-results button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.search-results button:hover {
+  background: #f5f5f5;
+}
+
 .add-error {
   color: #c0392b;
   font-size: 14px;

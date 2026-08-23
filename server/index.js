@@ -117,7 +117,90 @@ async function getStockInfo(accessToken, code) {
   }
 }
 
+// 토스증권에는 "이름으로 검색"하는 공식 API가 없어서,
+// 시장 전체 목록(KOSPI+KOSDAQ, 개별 종목만)을 한 번 받아 메모리에 저장해두고
+// 그 목록 안에서 이름/코드를 직접 걸러내는 방식으로 검색을 구현한다.
+// 목록은 서버가 켜져 있는 동안 재사용한다(자주 바뀌는 데이터가 아니므로).
+let stockListCache = null
+let stockListRequestPromise = null
+
+async function getStockList() {
+  if (stockListCache) {
+    return stockListCache
+  }
+
+  if (!stockListRequestPromise) {
+    stockListRequestPromise = (async () => {
+      const accessToken = await getTossAccessToken()
+      const authHeader = { Authorization: `Bearer ${accessToken}` }
+
+      const [kospiRes, kosdaqRes] = await Promise.all([
+        fetchWithRetry(`${TOSS_API_BASE}/api/v1/stocks/all?market=KOSPI&securityType=STOCK`, {
+          headers: authHeader,
+        }),
+        fetchWithRetry(`${TOSS_API_BASE}/api/v1/stocks/all?market=KOSDAQ&securityType=STOCK`, {
+          headers: authHeader,
+        }),
+      ])
+
+      if (!kospiRes.ok || !kosdaqRes.ok) {
+        throw new Error('종목 목록 조회 실패')
+      }
+
+      const kospiData = await kospiRes.json()
+      const kosdaqData = await kosdaqRes.json()
+
+      stockListCache = [...(kospiData.result ?? []), ...(kosdaqData.result ?? [])].map(
+        (item) => ({ symbol: item.symbol, name: item.name }),
+      )
+      return stockListCache
+    })()
+  }
+
+  try {
+    return await stockListRequestPromise
+  } finally {
+    stockListRequestPromise = null
+  }
+}
+
+function searchStockList(list, query) {
+  const keyword = query.trim().toLowerCase()
+  if (!keyword) return []
+
+  const matches = list.filter(
+    (item) =>
+      item.name.toLowerCase().includes(keyword) || item.symbol.toLowerCase().includes(keyword),
+  )
+
+  // 검색어로 시작하는 이름을 더 관련도 높은 결과로 앞에 보여준다.
+  matches.sort((a, b) => {
+    const aStarts = a.name.toLowerCase().startsWith(keyword) ? 0 : 1
+    const bStarts = b.name.toLowerCase().startsWith(keyword) ? 0 : 1
+    return aStarts - bStarts
+  })
+
+  return matches.slice(0, 5)
+}
+
 const server = createServer(async (req, res) => {
+  const url = new URL(req.url, `http://localhost:${PORT}`)
+
+  if (req.method === 'GET' && url.pathname === '/api/stocks/search') {
+    const query = url.searchParams.get('q') ?? ''
+    try {
+      const list = await getStockList()
+      const results = searchStockList(list, query)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ result: results }))
+    } catch (error) {
+      console.error('종목 검색 실패:', error.message)
+      res.writeHead(502, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: '종목 검색에 실패했습니다.' }))
+    }
+    return
+  }
+
   const match = req.url.match(/^\/api\/stock\/([A-Za-z0-9.-]+)$/)
 
   if (req.method !== 'GET' || !match) {
