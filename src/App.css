@@ -6,6 +6,18 @@
   margin-bottom: 16px;
 }
 
+.add-stock-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.add-stock-input {
+  padding: 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+}
+
 .stock-card {
   background: #ffffff;
   border: 1px solid #e0e0e0;
