@@ -7,6 +7,16 @@ const initialStocks = [
   { id: '035420', name: 'NAVER', code: '035420', price: '210,000원', changeRate: '+0.45%' },
 ]
 
+async function fetchStockData(name) {
+  return {
+    id: Date.now().toString(),
+    name,
+    code: '-',
+    price: '-',
+    changeRate: '+0.00%',
+  }
+}
+
 function App() {
   const [stocks, setStocks] = useState(initialStocks)
   const [searchTerm, setSearchTerm] = useState('')
@@ -24,15 +34,9 @@ function App() {
     setStocks(stocks.filter((stock) => stock.id !== id))
   }
 
-  function handleAdd() {
+  async function handleAdd() {
     if (newStockName.trim() === '') return
-    const newStock = {
-      id: Date.now().toString(),
-      name: newStockName,
-      code: '-',
-      price: '-',
-      changeRate: '+0.00%',
-    }
+    const newStock = await fetchStockData(newStockName)
     setStocks([...stocks, newStock])
     setNewStockName('')
   }
