@@ -3,6 +3,26 @@ import { createServer } from 'node:http'
 const PORT = 3001
 const TOSS_API_BASE = 'https://openapi.tossinvest.com'
 
+// 토스증권 API는 짧은 시간에 요청이 몰리면 일시적으로 429(요청 과다)를 반환한다.
+// 이런 경우 잠깐 기다렸다가 다시 시도하면 대부분 성공하므로 재시도 로직을 둔다.
+async function fetchWithRetry(url, options, retries = 3, delayMs = 300) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    let response
+    try {
+      response = await fetch(url, options)
+    } catch (error) {
+      if (attempt === retries) throw error
+      await new Promise((resolve) => setTimeout(resolve, delayMs * 2 ** attempt))
+      continue
+    }
+
+    if (response.status !== 429 || attempt === retries) {
+      return response
+    }
+    await new Promise((resolve) => setTimeout(resolve, delayMs * 2 ** attempt))
+  }
+}
+
 // 토스증권은 새 토큰을 발급하면 이전 토큰을 즉시 무효화하므로,
 // 요청마다 새로 발급받지 않고 만료 전까지 하나의 토큰을 재사용한다.
 // 동시에 여러 요청이 들어와도 토큰 발급은 한 번만 하도록 진행 중인 요청을 공유한다.
@@ -17,7 +37,7 @@ async function getTossAccessToken() {
 
   if (!tokenRequestPromise) {
     tokenRequestPromise = (async () => {
-      const response = await fetch(`${TOSS_API_BASE}/oauth2/token`, {
+      const response = await fetchWithRetry(`${TOSS_API_BASE}/oauth2/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -50,9 +70,9 @@ async function getStockInfo(accessToken, code) {
   const authHeader = { Authorization: `Bearer ${accessToken}` }
 
   const [priceRes, stockRes, candleRes] = await Promise.all([
-    fetch(`${TOSS_API_BASE}/api/v1/prices?symbols=${code}`, { headers: authHeader }),
-    fetch(`${TOSS_API_BASE}/api/v1/stocks?symbols=${code}`, { headers: authHeader }),
-    fetch(`${TOSS_API_BASE}/api/v1/candles?symbol=${code}&interval=1d&count=2`, {
+    fetchWithRetry(`${TOSS_API_BASE}/api/v1/prices?symbols=${code}`, { headers: authHeader }),
+    fetchWithRetry(`${TOSS_API_BASE}/api/v1/stocks?symbols=${code}`, { headers: authHeader }),
+    fetchWithRetry(`${TOSS_API_BASE}/api/v1/candles?symbol=${code}&interval=1d&count=2`, {
       headers: authHeader,
     }),
   ])
