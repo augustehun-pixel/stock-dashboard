@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import './App.css'
 
 const stocks = [
@@ -7,10 +8,27 @@ const stocks = [
 ]
 
 function App() {
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const filteredStocks = stocks.filter((stock) => {
+    const keyword = searchTerm.toLowerCase()
+    return (
+      stock.name.toLowerCase().includes(keyword) ||
+      stock.code.toLowerCase().includes(keyword)
+    )
+  })
+
   return (
     <>
       <h1>Hello Stock Dashboard</h1>
-      {stocks.map((stock) => {
+      <input
+        type="text"
+        className="search-input"
+        placeholder="종목 이름 또는 코드 검색"
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+      />
+      {filteredStocks.map((stock) => {
         const isNegative = stock.changeRate.startsWith('-')
         const isBigMove = Math.abs(parseFloat(stock.changeRate)) >= 1
         return (
