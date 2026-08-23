@@ -1,13 +1,20 @@
 import './App.css'
 
+const stock = {
+  name: '삼성전자',
+  code: '005930',
+  price: '75,000원',
+  changeRate: '+1.25%',
+}
+
 function App() {
   return (
     <>
       <h1>Hello Stock Dashboard</h1>
       <div className="stock-card">
-        <p>삼성전자 (005930)</p>
-        <p>75,000원</p>
-        <p>+1.25%</p>
+        <p>{stock.name} ({stock.code})</p>
+        <p>{stock.price}</p>
+        <p>{stock.changeRate}</p>
       </div>
     </>
   )
