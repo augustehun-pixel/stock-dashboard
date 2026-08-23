@@ -5,3 +5,11 @@
   padding: 16px;
   width: fit-content;
 }
+
+.positive {
+  color: red;
+}
+
+.negative {
+  color: blue;
+}

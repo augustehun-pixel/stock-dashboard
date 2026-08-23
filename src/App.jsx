@@ -14,7 +14,9 @@ function App() {
       <div className="stock-card">
         <p>{stock.name} ({stock.code})</p>
         <p>{stock.price}</p>
-        <p>{stock.changeRate}</p>
+        <p className={stock.changeRate.startsWith('-') ? 'negative' : 'positive'}>
+          {stock.changeRate}
+        </p>
       </div>
     </>
   )
