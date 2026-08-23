@@ -10,15 +10,18 @@ function App() {
   return (
     <>
       <h1>Hello Stock Dashboard</h1>
-      {stocks.map((stock) => (
-        <div className="stock-card" key={stock.code}>
-          <p>{stock.name} ({stock.code})</p>
-          <p>{stock.price}</p>
-          <p className={stock.changeRate.startsWith('-') ? 'negative' : 'positive'}>
-            {stock.changeRate}
-          </p>
-        </div>
-      ))}
+      {stocks.map((stock) => {
+        const isNegative = stock.changeRate.startsWith('-')
+        return (
+          <div className="stock-card" key={stock.code}>
+            <p>{stock.name} ({stock.code})</p>
+            <p>{stock.price}</p>
+            <p className={isNegative ? 'negative' : 'positive'}>
+              {isNegative ? '↓' : '↑'} {stock.changeRate}
+            </p>
+          </div>
+        )
+      })}
     </>
   )
 }
