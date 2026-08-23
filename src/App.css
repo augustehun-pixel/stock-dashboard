@@ -13,3 +13,12 @@
 .negative {
   color: blue;
 }
+
+.big-move-tag {
+  display: inline-block;
+  font-size: 12px;
+  color: #555;
+  background: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 4px;
+}

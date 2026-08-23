@@ -12,6 +12,7 @@ function App() {
       <h1>Hello Stock Dashboard</h1>
       {stocks.map((stock) => {
         const isNegative = stock.changeRate.startsWith('-')
+        const isBigMove = Math.abs(parseFloat(stock.changeRate)) >= 1
         return (
           <div className="stock-card" key={stock.code}>
             <p>{stock.name} ({stock.code})</p>
@@ -19,6 +20,7 @@ function App() {
             <p className={isNegative ? 'negative' : 'positive'}>
               {isNegative ? '↓' : '↑'} {stock.changeRate}
             </p>
+            {isBigMove && <p className="big-move-tag">큰 변동</p>}
           </div>
         )
       })}
