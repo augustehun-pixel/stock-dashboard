@@ -1,7 +1,32 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 
-const initialStockCodes = ['005930', '000660', '035420']
+const defaultStockCodes = ['005930', '000660', '035420']
+const WATCHLIST_STORAGE_KEY = 'stock-dashboard:watchlist'
+
+// localStorage에는 종목코드 목록만 저장한다. 가격/등락률 같은 시세 데이터나
+// 비밀값은 절대 저장하지 않고, 새로고침 시 항상 서버에서 다시 받아온다.
+function loadWatchlistCodes() {
+  try {
+    const raw = localStorage.getItem(WATCHLIST_STORAGE_KEY)
+    if (!raw) return defaultStockCodes
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed) && parsed.every((code) => typeof code === 'string')) {
+      return parsed
+    }
+    return defaultStockCodes
+  } catch {
+    return defaultStockCodes
+  }
+}
+
+function saveWatchlistCodes(codes) {
+  try {
+    localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(codes))
+  } catch {
+    // localStorage를 쓸 수 없어도(예: 브라우저 설정으로 차단) 앱은 계속 동작해야 하므로 무시한다.
+  }
+}
 
 function formatChangeRate(rate) {
   if (rate === null || rate === undefined) return null
@@ -36,14 +61,13 @@ function App() {
 
   useEffect(() => {
     async function loadInitialStocks() {
-      const results = await Promise.allSettled(
-        initialStockCodes.map((code) => fetchStockData(code)),
-      )
+      const codes = loadWatchlistCodes()
+      const results = await Promise.allSettled(codes.map((code) => fetchStockData(code)))
       const loadedStocks = results.map((result, index) => {
         if (result.status === 'fulfilled') {
           return result.value
         }
-        const code = initialStockCodes[index]
+        const code = codes[index]
         return {
           id: code,
           name: code,
@@ -89,7 +113,11 @@ function App() {
   })
 
   function handleDelete(id) {
-    setStocks(stocks.filter((stock) => stock.id !== id))
+    setStocks((prevStocks) => {
+      const updated = prevStocks.filter((stock) => stock.id !== id)
+      saveWatchlistCodes(updated.map((stock) => stock.code))
+      return updated
+    })
   }
 
   async function handlePickResult(result) {
@@ -103,7 +131,11 @@ function App() {
     setIsAdding(true)
     try {
       const newStock = await fetchStockData(result.symbol)
-      setStocks((prevStocks) => [...prevStocks, newStock])
+      setStocks((prevStocks) => {
+        const updated = [...prevStocks, newStock]
+        saveWatchlistCodes(updated.map((stock) => stock.code))
+        return updated
+      })
       setAddQuery('')
       setSearchResults([])
     } catch {
