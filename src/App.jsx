@@ -1,11 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 
-const initialStocks = [
-  { id: '005930', name: '삼성전자', code: '005930', price: '75,000원', changeRate: '+1.25%' },
-  { id: '000660', name: 'SK하이닉스', code: '000660', price: '185,000원', changeRate: '-0.80%' },
-  { id: '035420', name: 'NAVER', code: '035420', price: '210,000원', changeRate: '+0.45%' },
-]
+const initialStockCodes = ['005930', '000660', '035420']
 
 function formatChangeRate(rate) {
   if (rate === null || rate === undefined) return null
@@ -25,42 +21,41 @@ async function fetchStockData(code) {
     code: data.code,
     price: `${Number(data.price).toLocaleString()}원`,
     changeRate: formatChangeRate(data.changeRate),
+    status: 'success',
   }
 }
 
 function App() {
-  const [stocks, setStocks] = useState(initialStocks)
+  const [stocks, setStocks] = useState([])
+  const [isLoadingInitial, setIsLoadingInitial] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [newStockName, setNewStockName] = useState('')
-  const [samsungStatus, setSamsungStatus] = useState('loading')
   const [isAdding, setIsAdding] = useState(false)
   const [addError, setAddError] = useState('')
 
   useEffect(() => {
-    async function loadSamsungPrice() {
-      try {
-        const response = await fetch('/api/stock/005930')
-        if (!response.ok) throw new Error('요청 실패')
-        const data = await response.json()
-        setStocks((prevStocks) =>
-          prevStocks.map((stock) =>
-            stock.id === '005930'
-              ? {
-                  ...stock,
-                  name: data.name,
-                  code: data.code,
-                  price: `${Number(data.price).toLocaleString()}원`,
-                  changeRate: formatChangeRate(data.changeRate),
-                }
-              : stock,
-          ),
-        )
-        setSamsungStatus('success')
-      } catch {
-        setSamsungStatus('error')
-      }
+    async function loadInitialStocks() {
+      const results = await Promise.allSettled(
+        initialStockCodes.map((code) => fetchStockData(code)),
+      )
+      const loadedStocks = results.map((result, index) => {
+        if (result.status === 'fulfilled') {
+          return result.value
+        }
+        const code = initialStockCodes[index]
+        return {
+          id: code,
+          name: code,
+          code,
+          price: '-',
+          changeRate: null,
+          status: 'error',
+        }
+      })
+      setStocks(loadedStocks)
+      setIsLoadingInitial(false)
     }
-    loadSamsungPrice()
+    loadInitialStocks()
   }, [])
 
   const filteredStocks = stocks.filter((stock) => {
@@ -124,62 +119,52 @@ function App() {
         </button>
       </div>
       {addError && <p className="add-error">{addError}</p>}
-      {filteredStocks.map((stock) => {
-        const isSamsung = stock.id === '005930'
+      {isLoadingInitial ? (
+        <p>불러오는 중...</p>
+      ) : (
+        filteredStocks.map((stock) => {
+          if (stock.status === 'error') {
+            return (
+              <div className="stock-card" key={stock.id}>
+                <p>{stock.name} ({stock.code})</p>
+                <p>가격 정보를 불러오지 못했습니다</p>
+                <button type="button" onClick={() => handleDelete(stock.id)}>
+                  삭제
+                </button>
+              </div>
+            )
+          }
 
-        if (isSamsung && samsungStatus === 'loading') {
+          const rate = stock.changeRate === null ? null : parseFloat(stock.changeRate)
+          const isBigMove = rate !== null && Math.abs(rate) >= 1
+
+          let changeClass = 'neutral'
+          let arrow = '→'
+          if (rate === null) {
+            changeClass = 'neutral'
+          } else if (rate > 0) {
+            changeClass = 'positive'
+            arrow = '↑'
+          } else if (rate < 0) {
+            changeClass = 'negative'
+            arrow = '↓'
+          }
+
           return (
             <div className="stock-card" key={stock.id}>
               <p>{stock.name} ({stock.code})</p>
-              <p>불러오는 중...</p>
+              <p>{stock.price}</p>
+              <p className={changeClass}>
+                {rate === null ? '등락률 정보 없음' : `${arrow} ${stock.changeRate}`}
+              </p>
+              {isBigMove && <p className="big-move-tag">큰 변동</p>}
               <button type="button" onClick={() => handleDelete(stock.id)}>
                 삭제
               </button>
             </div>
           )
-        }
-
-        if (isSamsung && samsungStatus === 'error') {
-          return (
-            <div className="stock-card" key={stock.id}>
-              <p>{stock.name} ({stock.code})</p>
-              <p>가격 정보를 불러오지 못했습니다</p>
-              <button type="button" onClick={() => handleDelete(stock.id)}>
-                삭제
-              </button>
-            </div>
-          )
-        }
-
-        const rate = stock.changeRate === null ? null : parseFloat(stock.changeRate)
-        const isBigMove = rate !== null && Math.abs(rate) >= 1
-
-        let changeClass = 'neutral'
-        let arrow = '→'
-        if (rate === null) {
-          changeClass = 'neutral'
-        } else if (rate > 0) {
-          changeClass = 'positive'
-          arrow = '↑'
-        } else if (rate < 0) {
-          changeClass = 'negative'
-          arrow = '↓'
-        }
-
-        return (
-          <div className="stock-card" key={stock.id}>
-            <p>{stock.name} ({stock.code})</p>
-            <p>{stock.price}</p>
-            <p className={changeClass}>
-              {rate === null ? '등락률 정보 없음' : `${arrow} ${stock.changeRate}`}
-            </p>
-            {isBigMove && <p className="big-move-tag">큰 변동</p>}
-            <button type="button" onClick={() => handleDelete(stock.id)}>
-              삭제
-            </button>
-          </div>
-        )
-      })}
+        })
+      )}
     </>
   )
 }

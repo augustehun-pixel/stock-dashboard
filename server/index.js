@@ -3,23 +3,47 @@ import { createServer } from 'node:http'
 const PORT = 3001
 const TOSS_API_BASE = 'https://openapi.tossinvest.com'
 
-async function getTossAccessToken() {
-  const response = await fetch(`${TOSS_API_BASE}/oauth2/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: process.env.TOSS_CLIENT_KEY,
-      client_secret: process.env.TOSS_CLIENT_SECRET,
-    }),
-  })
+// 토스증권은 새 토큰을 발급하면 이전 토큰을 즉시 무효화하므로,
+// 요청마다 새로 발급받지 않고 만료 전까지 하나의 토큰을 재사용한다.
+// 동시에 여러 요청이 들어와도 토큰 발급은 한 번만 하도록 진행 중인 요청을 공유한다.
+let cachedToken = null
+let cachedTokenExpiresAt = 0
+let tokenRequestPromise = null
 
-  if (!response.ok) {
-    throw new Error(`토큰 발급 실패 (HTTP ${response.status})`)
+async function getTossAccessToken() {
+  if (cachedToken && Date.now() < cachedTokenExpiresAt) {
+    return cachedToken
   }
 
-  const data = await response.json()
-  return data.access_token
+  if (!tokenRequestPromise) {
+    tokenRequestPromise = (async () => {
+      const response = await fetch(`${TOSS_API_BASE}/oauth2/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: process.env.TOSS_CLIENT_KEY,
+          client_secret: process.env.TOSS_CLIENT_SECRET,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`토큰 발급 실패 (HTTP ${response.status})`)
+      }
+
+      const data = await response.json()
+      cachedToken = data.access_token
+      // 만료 60초 전에 미리 새로 받도록 여유를 둔다.
+      cachedTokenExpiresAt = Date.now() + (data.expires_in - 60) * 1000
+      return cachedToken
+    })()
+  }
+
+  try {
+    return await tokenRequestPromise
+  } finally {
+    tokenRequestPromise = null
+  }
 }
 
 async function getStockInfo(accessToken, code) {
