@@ -53,6 +53,27 @@
   color: #666;
 }
 
+.manual-refresh-button {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid #90c2ff;
+  border-radius: 6px;
+  background: #eaf3ff;
+  color: #1a6fd6;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.manual-refresh-button:hover {
+  background: #dcebff;
+}
+
+.manual-refresh-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .auto-refresh-status {
   display: flex;
   flex-direction: column;

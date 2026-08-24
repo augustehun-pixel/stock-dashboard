@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 
 const defaultStockCodes = ['005930', '000660', '035420']
@@ -107,11 +107,43 @@ function App() {
   const [addError, setAddError] = useState('')
   const [selectedStock, setSelectedStock] = useState(null)
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const stocksRef = useRef(stocks)
   useEffect(() => {
     stocksRef.current = stocks
   }, [stocks])
+
+  // isRefreshingRef가 실제 "잠금"이다(자동 갱신과 수동 버튼이 함께 확인해서 중복 요청을 막는다).
+  // isRefreshing state는 버튼 표시("갱신 중...")를 화면에 그려주기 위한 용도로만 쓴다.
+  const isRefreshingRef = useRef(false)
+
+  // 관심종목 가격을 다시 받아온다. 자동 갱신(30초 주기)과 "지금 새로고침" 버튼이
+  // 이 함수 하나를 공유해서 쓴다. 토스 API 429(요청 과다)를 피하기 위해
+  // (1) 이미 갱신 중이면 새 요청을 건너뛰고, (2) 여러 종목을 한번에 몰아서 요청하지 않고
+  // 하나씩 순서대로 요청한다.
+  const refreshStocks = useCallback(async () => {
+    if (isRefreshingRef.current) return
+
+    const codes = stocksRef.current.map((stock) => stock.code)
+    if (codes.length === 0) return
+
+    isRefreshingRef.current = true
+    setIsRefreshing(true)
+    for (const code of codes) {
+      try {
+        const updated = await fetchStockData(code)
+        setStocks((prevStocks) =>
+          prevStocks.map((stock) => (stock.code === code ? updated : stock)),
+        )
+      } catch {
+        // 이 종목만 갱신을 건너뛰고 기존 값을 그대로 둔다. 다른 종목 갱신은 계속 진행한다.
+      }
+    }
+    setLastUpdatedAt(new Date())
+    isRefreshingRef.current = false
+    setIsRefreshing(false)
+  }, [])
 
   useEffect(() => {
     if (!selectedStock) return
@@ -146,35 +178,16 @@ function App() {
     loadInitialStocks()
   }, [])
 
-  // 30초마다 관심종목 가격을 다시 받아온다. 토스 API 429(요청 과다)를 피하기 위해
-  // (1) 화면이 보이지 않을 때는 건너뛰고, (2) 이전 갱신이 끝나기 전엔 새 주기를 건너뛰고,
-  // (3) 여러 종목을 한번에 몰아서 요청하지 않고 하나씩 순서대로 요청한다.
+  // 30초마다 refreshStocks를 호출한다. 화면이 보이지 않을 때는 건너뛴다
+  // (어차피 refreshStocks 안에서도 이미 갱신 중이면 건너뛰므로, 버튼과 겹쳐도 중복 요청은 안 생긴다).
   useEffect(() => {
-    let isRefreshing = false
-
-    const intervalId = setInterval(async () => {
-      if (document.hidden || isRefreshing) return
-
-      const codes = stocksRef.current.map((stock) => stock.code)
-      if (codes.length === 0) return
-
-      isRefreshing = true
-      for (const code of codes) {
-        try {
-          const updated = await fetchStockData(code)
-          setStocks((prevStocks) =>
-            prevStocks.map((stock) => (stock.code === code ? updated : stock)),
-          )
-        } catch {
-          // 이 종목만 갱신을 건너뛰고 기존 값을 그대로 둔다. 다른 종목 갱신은 계속 진행한다.
-        }
-      }
-      setLastUpdatedAt(new Date())
-      isRefreshing = false
+    const intervalId = setInterval(() => {
+      if (document.hidden) return
+      refreshStocks()
     }, AUTO_REFRESH_INTERVAL_MS)
 
     return () => clearInterval(intervalId)
-  }, [])
+  }, [refreshStocks])
 
   useEffect(() => {
     const keyword = addQuery.trim()
@@ -301,6 +314,14 @@ function App() {
         <div className="watchlist-header">
           <h2>관심종목</h2>
           <span className="watchlist-count">{stocks.length}개</span>
+          <button
+            type="button"
+            className="manual-refresh-button"
+            onClick={refreshStocks}
+            disabled={isRefreshing}
+          >
+            {isRefreshing ? '갱신 중...' : '지금 새로고침'}
+          </button>
           <span className="auto-refresh-status">
             <span>30초마다 자동 갱신</span>
             <span className="auto-refresh-time">
