@@ -9,6 +9,13 @@ const LONG_PRESS_MS = 400
 // 길게 누르기가 확정되기 전에 손가락이 이만큼(px) 넘게 움직이면 스크롤/짧은 탭으로 보고 드래그를 취소한다.
 const DRAG_MOVE_CANCEL_PX = 10
 
+// 상세보기 차트의 기간 선택지. value는 서버 API(/api/stock/:code/chart?period=...)로 그대로 전달된다.
+const CHART_PERIODS = [
+  { value: '1M', label: '1개월' },
+  { value: '3M', label: '3개월' },
+  { value: '6M', label: '6개월' },
+]
+
 // localStorage에는 종목코드 목록만 저장한다. 가격/등락률 같은 시세 데이터나
 // 비밀값은 절대 저장하지 않고, 새로고침 시 항상 서버에서 다시 받아온다.
 function loadWatchlistCodes() {
@@ -101,10 +108,10 @@ async function fetchStockData(code) {
   }
 }
 
-// 최근 30거래일 종가로 아주 단순한 선 차트를 그린다. 새 라이브러리 없이 순수 SVG로 그린다.
+// 선택된 기간의 종가로 아주 단순한 선 차트를 그린다. 새 라이브러리 없이 순수 SVG로 그린다.
 // viewBox 좌표계(0~100, 0~32)를 쓰고 CSS로 실제 크기를 맞추기 때문에, 모달 폭에 맞게
 // 알아서 늘어나거나 줄어들고 가로 스크롤이 생기지 않는다.
-function StockChart({ closes }) {
+function StockChart({ closes, periodLabel }) {
   if (!closes || closes.length < 2) return null
 
   const width = 100
@@ -129,7 +136,7 @@ function StockChart({ closes }) {
       viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
       role="img"
-      aria-label="최근 30거래일 가격 추이"
+      aria-label={`최근 ${periodLabel} 가격 추이`}
     >
       <polyline
         points={points}
@@ -200,12 +207,13 @@ function App() {
 
   const [chartStatus, setChartStatus] = useState('idle') // idle | loading | success | error
   const [chartCloses, setChartCloses] = useState(null)
-  // 같은 종목을 닫았다가 바로 다시 열었을 때 차트를 또 요청하지 않도록 두는 아주 단순한
-  // 캐시(세션 동안만 메모리에 유지, localStorage에는 저장하지 않음).
+  const [chartPeriod, setChartPeriod] = useState('1M')
+  // 같은 "종목 + 기간" 조합을 다시 열었을 때 차트를 또 요청하지 않도록 두는 아주 단순한
+  // 캐시(세션 동안만 메모리에 유지, localStorage에는 저장하지 않음). 키 예: "035420-1M".
   const chartCacheRef = useRef(new Map())
 
-  // 상세보기 모달을 열었을 때만 최근 30거래일 차트를 받아온다. 관심종목 목록의 30초
-  // 자동 갱신(refreshStocks)이나 수동 새로고침과는 완전히 분리돼 있어서, 카드 목록만
+  // 상세보기 모달을 열었을 때, 그리고 기간 버튼을 바꿀 때만 차트를 받아온다. 관심종목 목록의
+  // 30초 자동 갱신(refreshStocks)이나 수동 새로고침과는 완전히 분리돼 있어서, 카드 목록만
   // 보고 있을 때는 이 요청이 전혀 발생하지 않는다.
   useEffect(() => {
     if (!selectedStock || selectedStock.status === 'error') {
@@ -215,7 +223,8 @@ function App() {
     }
 
     const code = selectedStock.code
-    const cached = chartCacheRef.current.get(code)
+    const cacheKey = `${code}-${chartPeriod}`
+    const cached = chartCacheRef.current.get(cacheKey)
     if (cached) {
       setChartCloses(cached)
       setChartStatus('success')
@@ -226,14 +235,14 @@ function App() {
     setChartStatus('loading')
     setChartCloses(null)
 
-    fetch(`/api/stock/${code}/chart`)
+    fetch(`/api/stock/${code}/chart?period=${chartPeriod}`)
       .then((response) => {
         if (!response.ok) throw new Error('차트 조회 실패')
         return response.json()
       })
       .then((data) => {
         if (cancelled) return
-        chartCacheRef.current.set(code, data.closes)
+        chartCacheRef.current.set(cacheKey, data.closes)
         setChartCloses(data.closes)
         setChartStatus('success')
       })
@@ -244,7 +253,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [selectedStock])
+  }, [selectedStock, chartPeriod])
 
   useEffect(() => {
     async function loadInitialStocks() {
@@ -445,6 +454,8 @@ function App() {
 
   function handleSelectStock(stock) {
     setSelectedStock(stock)
+    // 상세보기를 새로 열 때마다 차트 기간은 항상 1개월부터 시작한다.
+    setChartPeriod('1M')
   }
 
   function handleCardKeyDown(e, stock) {
@@ -687,7 +698,24 @@ function App() {
                     )}
 
                     <div className="stock-chart-section">
-                      <p className="stock-chart-title">최근 30거래일</p>
+                      <div className="stock-chart-header">
+                        <p className="stock-chart-title">가격 추이</p>
+                        <div className="stock-chart-period-buttons" role="group" aria-label="차트 기간 선택">
+                          {CHART_PERIODS.map((period) => (
+                            <button
+                              key={period.value}
+                              type="button"
+                              className={`stock-chart-period-button${
+                                chartPeriod === period.value ? ' active' : ''
+                              }`}
+                              aria-pressed={chartPeriod === period.value}
+                              onClick={() => setChartPeriod(period.value)}
+                            >
+                              {period.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       {chartStatus === 'loading' && (
                         <p className="stock-chart-status">차트 불러오는 중...</p>
                       )}
@@ -696,7 +724,12 @@ function App() {
                       )}
                       {chartStatus === 'success' && chartCloses && chartCloses.length >= 2 && (
                         <>
-                          <StockChart closes={chartCloses} />
+                          <StockChart
+                            closes={chartCloses}
+                            periodLabel={
+                              CHART_PERIODS.find((period) => period.value === chartPeriod)?.label
+                            }
+                          />
                           <div className="stock-chart-range">
                             <span>{formatPriceValue(chartCloses[0])}</span>
                             <span>{formatPriceValue(chartCloses[chartCloses.length - 1])}</span>

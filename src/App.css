@@ -465,10 +465,44 @@
   border-top: 1px solid #eee;
 }
 
+.stock-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 .stock-chart-title {
   font-size: 12px;
   color: #666;
-  margin: 0 0 8px;
+  margin: 0;
+}
+
+.stock-chart-period-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+/* 버튼 눌림 피드백(:active 확대 효과)은 .app-shell button 공통 규칙에서 이미 적용된다. */
+.stock-chart-period-button {
+  min-width: 48px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.stock-chart-period-button.active {
+  border-color: var(--primary-border);
+  background: var(--primary-bg);
+  color: var(--primary-text);
 }
 
 .stock-chart-status {

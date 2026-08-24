@@ -125,13 +125,20 @@ async function getStockInfo(accessToken, code) {
   }
 }
 
+// 차트 기간 → 요청할 거래일 수(캔들 개수). 토스 API에 "1개월/3개월/6개월" 같은 기간
+// 파라미터는 없고, count(캔들 개수)로만 기간을 조절할 수 있다. 기존에 "최근 30거래일"을
+// 1개월로 써왔던 것을 기준 삼아 3개월/6개월도 그 배수(90/180거래일)로 잡는다.
+// count=90, count=180 모두 실제 API 호출로 정상 동작(HTTP 200)하는 것을 미리 확인했다.
+const CHART_PERIOD_TO_COUNT = { '1M': 30, '3M': 90, '6M': 180 }
+
 // 상세보기 차트 전용. 관심종목 목록/30초 자동 갱신이 쓰는 getStockInfo와는 완전히 분리된
-// 함수로 둬서, 차트 요청(count=30)이 자동 갱신 호출량에 섞여 들어가지 않게 한다.
-async function getStockChart(accessToken, code) {
+// 함수로 둬서, 차트 요청이 자동 갱신 호출량에 섞여 들어가지 않게 한다.
+async function getStockChart(accessToken, code, period) {
+  const count = CHART_PERIOD_TO_COUNT[period] ?? CHART_PERIOD_TO_COUNT['1M']
   const authHeader = { Authorization: `Bearer ${accessToken}` }
 
   const candleRes = await fetchWithRetry(
-    `${TOSS_API_BASE}/api/v1/candles?symbol=${code}&interval=1d&count=30`,
+    `${TOSS_API_BASE}/api/v1/candles?symbol=${code}&interval=1d&count=${count}`,
     { headers: authHeader },
   )
 
@@ -230,13 +237,15 @@ const server = createServer(async (req, res) => {
     return
   }
 
-  const chartMatch = req.url.match(/^\/api\/stock\/([A-Za-z0-9.-]+)\/chart$/)
+  // 쿼리스트링(?period=...)이 붙으면 끝나므로, 경로만 담긴 url.pathname으로 매칭해야 한다.
+  const chartMatch = url.pathname.match(/^\/api\/stock\/([A-Za-z0-9.-]+)\/chart$/)
 
   if (req.method === 'GET' && chartMatch) {
     const code = chartMatch[1]
+    const period = url.searchParams.get('period')
     try {
       const accessToken = await getTossAccessToken()
-      const closes = await getStockChart(accessToken, code)
+      const closes = await getStockChart(accessToken, code, period)
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ closes }))
     } catch (error) {
