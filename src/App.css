@@ -459,6 +459,46 @@
   margin: 0;
 }
 
+/* 상세보기 모달의 다크모드 전용 색상. 라이트모드 규칙은 위 그대로 두고,
+   여기서는 관심종목 카드와 같은 다크 팔레트(배경/글자 단계)만 덧붙인다. */
+@media (prefers-color-scheme: dark) {
+  .stock-detail-modal {
+    background: #242530;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  .stock-detail-header h2,
+  .stock-detail-price,
+  .stock-detail-grid dd {
+    color: #f2f2f5;
+  }
+
+  .stock-detail-code,
+  .stock-detail-market,
+  .stock-detail-grid dt {
+    color: #a7abb5;
+  }
+
+  .stock-detail-close {
+    background: #3a3b46;
+    border-color: #48495a;
+    color: #f2f2f5;
+  }
+
+  .stock-detail-close:hover {
+    background: #454654;
+  }
+
+  .stock-detail-grid div {
+    background: #1c1c1f;
+    border-color: #303034;
+  }
+
+  .stock-detail-timestamp {
+    color: #8b8f99;
+  }
+}
+
 @media (max-width: 480px) {
   .app-shell {
     padding: 16px 12px 32px;
