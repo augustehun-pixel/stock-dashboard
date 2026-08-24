@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
 const defaultStockCodes = ['005930', '000660', '035420']
 const WATCHLIST_STORAGE_KEY = 'stock-dashboard:watchlist'
+const AUTO_REFRESH_INTERVAL_MS = 30000
 
 // localStorage에는 종목코드 목록만 저장한다. 가격/등락률 같은 시세 데이터나
 // 비밀값은 절대 저장하지 않고, 새로고침 시 항상 서버에서 다시 받아온다.
@@ -66,6 +67,14 @@ function formatTimestamp(value) {
   return date.toLocaleString('ko-KR')
 }
 
+// 자동 갱신 상태 표시줄은 화면이 좁아도 한 줄에 들어가야 하므로 "HH:MM:SS"만 보여준다.
+function formatTimeOnly(value) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleTimeString('ko-KR', { hour12: false })
+}
+
 async function fetchStockData(code) {
   const response = await fetch(`/api/stock/${code}`)
   if (!response.ok) {
@@ -97,6 +106,12 @@ function App() {
   const [isAdding, setIsAdding] = useState(false)
   const [addError, setAddError] = useState('')
   const [selectedStock, setSelectedStock] = useState(null)
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null)
+
+  const stocksRef = useRef(stocks)
+  useEffect(() => {
+    stocksRef.current = stocks
+  }, [stocks])
 
   useEffect(() => {
     if (!selectedStock) return
@@ -129,6 +144,36 @@ function App() {
       setIsLoadingInitial(false)
     }
     loadInitialStocks()
+  }, [])
+
+  // 30초마다 관심종목 가격을 다시 받아온다. 토스 API 429(요청 과다)를 피하기 위해
+  // (1) 화면이 보이지 않을 때는 건너뛰고, (2) 이전 갱신이 끝나기 전엔 새 주기를 건너뛰고,
+  // (3) 여러 종목을 한번에 몰아서 요청하지 않고 하나씩 순서대로 요청한다.
+  useEffect(() => {
+    let isRefreshing = false
+
+    const intervalId = setInterval(async () => {
+      if (document.hidden || isRefreshing) return
+
+      const codes = stocksRef.current.map((stock) => stock.code)
+      if (codes.length === 0) return
+
+      isRefreshing = true
+      for (const code of codes) {
+        try {
+          const updated = await fetchStockData(code)
+          setStocks((prevStocks) =>
+            prevStocks.map((stock) => (stock.code === code ? updated : stock)),
+          )
+        } catch {
+          // 이 종목만 갱신을 건너뛰고 기존 값을 그대로 둔다. 다른 종목 갱신은 계속 진행한다.
+        }
+      }
+      setLastUpdatedAt(new Date())
+      isRefreshing = false
+    }, AUTO_REFRESH_INTERVAL_MS)
+
+    return () => clearInterval(intervalId)
   }, [])
 
   useEffect(() => {
@@ -256,6 +301,12 @@ function App() {
         <div className="watchlist-header">
           <h2>관심종목</h2>
           <span className="watchlist-count">{stocks.length}개</span>
+          <span className="auto-refresh-status">
+            <span>30초마다 자동 갱신</span>
+            <span className="auto-refresh-time">
+              마지막 갱신 {formatTimeOnly(lastUpdatedAt) ?? '대기 중'}
+            </span>
+          </span>
         </div>
 
         {isLoadingInitial ? (
