@@ -4,6 +4,10 @@ import './App.css'
 const defaultStockCodes = ['005930', '000660', '035420']
 const WATCHLIST_STORAGE_KEY = 'stock-dashboard:watchlist'
 const AUTO_REFRESH_INTERVAL_MS = 30000
+// 이 시간(ms) 이상 카드를 누르고 있으면 "탭"이 아니라 "드래그 시작"으로 본다.
+const LONG_PRESS_MS = 400
+// 길게 누르기가 확정되기 전에 손가락이 이만큼(px) 넘게 움직이면 스크롤/짧은 탭으로 보고 드래그를 취소한다.
+const DRAG_MOVE_CANCEL_PX = 10
 
 // localStorage에는 종목코드 목록만 저장한다. 가격/등락률 같은 시세 데이터나
 // 비밀값은 절대 저장하지 않고, 새로고침 시 항상 서버에서 다시 받아온다.
@@ -228,6 +232,129 @@ function App() {
     setSelectedStock((prev) => (prev && prev.id === id ? null : prev))
   }
 
+  // 관심종목 카드를 길게 눌러서 드래그로 순서를 바꾼다.
+  // dragStateRef: 포인터 하나의 "지금 어떤 상태인지"를 담는 값. 매 프레임 바뀌어도
+  // 리렌더링이 필요 없는 값이라 state가 아니라 ref로 둔다.
+  // draggingId: 화면에 "떠 있는" 느낌을 그려주기 위한 state (실제로 리렌더링이 필요한 부분).
+  // suppressClickRef: 드래그를 끝낸 직후에 뒤따라오는 click 이벤트가 상세보기를 열지 않도록 막는 플래그.
+  const cardRefs = useRef(new Map())
+  const dragStateRef = useRef({
+    pointerId: null,
+    id: null,
+    startX: 0,
+    startY: 0,
+    longPressTriggered: false,
+    timer: null,
+  })
+  const suppressClickRef = useRef(false)
+  const [draggingId, setDraggingId] = useState(null)
+
+  function findStockIdAtPoint(x, y) {
+    for (const [id, node] of cardRefs.current) {
+      const rect = node.getBoundingClientRect()
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        return id
+      }
+    }
+    return null
+  }
+
+  function handleCardPointerDown(e, stock) {
+    // 삭제 버튼 등 카드 안의 다른 버튼을 누른 경우엔 드래그를 시작하지 않는다.
+    if (e.target.closest('button')) return
+    // 마우스는 왼쪽 버튼으로 누른 경우만 드래그 후보로 본다.
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+
+    const dragState = dragStateRef.current
+    dragState.pointerId = e.pointerId
+    dragState.id = stock.id
+    dragState.startX = e.clientX
+    dragState.startY = e.clientY
+    dragState.longPressTriggered = false
+
+    // 손가락이 카드 밖으로 나가도 이 카드가 계속 이벤트를 받도록 포인터를 붙잡아둔다.
+    e.currentTarget.setPointerCapture(e.pointerId)
+
+    dragState.timer = setTimeout(() => {
+      dragState.longPressTriggered = true
+      setDraggingId(dragState.id)
+    }, LONG_PRESS_MS)
+  }
+
+  function handleCardPointerMove(e) {
+    const dragState = dragStateRef.current
+    if (dragState.pointerId !== e.pointerId) return
+
+    if (!dragState.longPressTriggered) {
+      const moved = Math.hypot(e.clientX - dragState.startX, e.clientY - dragState.startY)
+      if (moved > DRAG_MOVE_CANCEL_PX) {
+        // 길게 누르기가 확정되기 전에 움직였다 = 스크롤이나 짧은 탭 의도이므로 드래그를 취소한다.
+        clearTimeout(dragState.timer)
+        dragState.pointerId = null
+      }
+      return
+    }
+
+    // 드래그 확정 후에는 페이지 스크롤을 막고, 손가락이 있는 카드 자리로 순서를 바로 바꾼다.
+    e.preventDefault()
+    const overId = findStockIdAtPoint(e.clientX, e.clientY)
+    if (overId && overId !== dragState.id) {
+      setStocks((prevStocks) => {
+        const fromIndex = prevStocks.findIndex((stock) => stock.id === dragState.id)
+        const toIndex = prevStocks.findIndex((stock) => stock.id === overId)
+        if (fromIndex === -1 || toIndex === -1) return prevStocks
+
+        const updated = [...prevStocks]
+        const [moved] = updated.splice(fromIndex, 1)
+        updated.splice(toIndex, 0, moved)
+        return updated
+      })
+    }
+  }
+
+  function handleCardPointerUp(e) {
+    const dragState = dragStateRef.current
+    if (dragState.pointerId !== e.pointerId) return
+
+    clearTimeout(dragState.timer)
+
+    if (dragState.longPressTriggered) {
+      // 드래그로 바뀐 순서를 기존 localStorage 저장 방식 그대로 저장한다.
+      setStocks((prevStocks) => {
+        saveWatchlistCodes(prevStocks.map((stock) => stock.code))
+        return prevStocks
+      })
+      // 드래그를 마친 직후 발생하는 click 이벤트가 상세보기를 열지 않도록 막는다.
+      suppressClickRef.current = true
+      setDraggingId(null)
+    }
+
+    dragState.pointerId = null
+    dragState.id = null
+    dragState.longPressTriggered = false
+  }
+
+  function handleCardPointerCancel(e) {
+    const dragState = dragStateRef.current
+    if (dragState.pointerId !== e.pointerId) return
+
+    clearTimeout(dragState.timer)
+    if (dragState.longPressTriggered) {
+      setDraggingId(null)
+    }
+    dragState.pointerId = null
+    dragState.id = null
+    dragState.longPressTriggered = false
+  }
+
+  function handleCardClick(stock) {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false
+      return
+    }
+    handleSelectStock(stock)
+  }
+
   function handleSelectStock(stock) {
     setSelectedStock(stock)
   }
@@ -335,15 +462,26 @@ function App() {
         ) : (
           <div className="stock-grid">
             {filteredStocks.map((stock) => {
+              const cardRefCallback = (node) => {
+                if (node) cardRefs.current.set(stock.id, node)
+                else cardRefs.current.delete(stock.id)
+              }
+              const isDragging = draggingId === stock.id
+
               if (stock.status === 'error') {
                 return (
                   <div
-                    className="stock-card"
+                    className={`stock-card${isDragging ? ' stock-card--dragging' : ''}`}
                     key={stock.id}
+                    ref={cardRefCallback}
                     role="button"
                     tabIndex={0}
-                    onClick={() => handleSelectStock(stock)}
+                    onClick={() => handleCardClick(stock)}
                     onKeyDown={(e) => handleCardKeyDown(e, stock)}
+                    onPointerDown={(e) => handleCardPointerDown(e, stock)}
+                    onPointerMove={handleCardPointerMove}
+                    onPointerUp={handleCardPointerUp}
+                    onPointerCancel={handleCardPointerCancel}
                   >
                     <p className="stock-name">{stock.name} ({stock.code})</p>
                     <p className="stock-error">가격 정보를 불러오지 못했습니다</p>
@@ -363,12 +501,17 @@ function App() {
 
               return (
                 <div
-                  className="stock-card"
+                  className={`stock-card${isDragging ? ' stock-card--dragging' : ''}`}
                   key={stock.id}
+                  ref={cardRefCallback}
                   role="button"
                   tabIndex={0}
-                  onClick={() => handleSelectStock(stock)}
+                  onClick={() => handleCardClick(stock)}
                   onKeyDown={(e) => handleCardKeyDown(e, stock)}
+                  onPointerDown={(e) => handleCardPointerDown(e, stock)}
+                  onPointerMove={handleCardPointerMove}
+                  onPointerUp={handleCardPointerUp}
+                  onPointerCancel={handleCardPointerCancel}
                 >
                   <p className="stock-name">{stock.name} ({stock.code})</p>
                   <p className="stock-price">{stock.price}</p>

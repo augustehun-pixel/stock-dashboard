@@ -191,12 +191,27 @@
   flex-direction: column;
   gap: 6px;
   cursor: pointer;
+  /* 세로 스크롤은 그대로 허용하되, 드래그가 시작되면 preventDefault로 직접 막는다. */
+  touch-action: pan-y;
+  /* 길게 눌렀을 때 iOS의 텍스트 선택/확대경, 복사 메뉴가 뜨지 않게 한다(드래그 제스처와 충돌 방지). */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .stock-card:hover,
 .stock-card:focus-visible {
   border-color: #90c2ff;
   outline: none;
+}
+
+.stock-card--dragging {
+  position: relative;
+  z-index: 10;
+  transform: scale(1.03);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
+  opacity: 0.9;
+  border-color: #90c2ff;
 }
 
 .stock-name {
