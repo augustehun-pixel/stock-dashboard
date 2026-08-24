@@ -101,6 +101,46 @@ async function fetchStockData(code) {
   }
 }
 
+// 최근 30거래일 종가로 아주 단순한 선 차트를 그린다. 새 라이브러리 없이 순수 SVG로 그린다.
+// viewBox 좌표계(0~100, 0~32)를 쓰고 CSS로 실제 크기를 맞추기 때문에, 모달 폭에 맞게
+// 알아서 늘어나거나 줄어들고 가로 스크롤이 생기지 않는다.
+function StockChart({ closes }) {
+  if (!closes || closes.length < 2) return null
+
+  const width = 100
+  const height = 32
+  const min = Math.min(...closes)
+  const max = Math.max(...closes)
+  const range = max - min || 1
+
+  const points = closes
+    .map((close, index) => {
+      const x = (index / (closes.length - 1)) * width
+      const y = height - ((close - min) / range) * height
+      return `${x},${y.toFixed(2)}`
+    })
+    .join(' ')
+
+  const isUp = closes[closes.length - 1] >= closes[0]
+
+  return (
+    <svg
+      className="stock-chart"
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      role="img"
+      aria-label="최근 30거래일 가격 추이"
+    >
+      <polyline
+        points={points}
+        fill="none"
+        vectorEffect="non-scaling-stroke"
+        className={`stock-chart-line ${isUp ? 'positive' : 'negative'}`}
+      />
+    </svg>
+  )
+}
+
 function App() {
   const [stocks, setStocks] = useState([])
   const [isLoadingInitial, setIsLoadingInitial] = useState(true)
@@ -156,6 +196,54 @@ function App() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedStock])
+
+  const [chartStatus, setChartStatus] = useState('idle') // idle | loading | success | error
+  const [chartCloses, setChartCloses] = useState(null)
+  // 같은 종목을 닫았다가 바로 다시 열었을 때 차트를 또 요청하지 않도록 두는 아주 단순한
+  // 캐시(세션 동안만 메모리에 유지, localStorage에는 저장하지 않음).
+  const chartCacheRef = useRef(new Map())
+
+  // 상세보기 모달을 열었을 때만 최근 30거래일 차트를 받아온다. 관심종목 목록의 30초
+  // 자동 갱신(refreshStocks)이나 수동 새로고침과는 완전히 분리돼 있어서, 카드 목록만
+  // 보고 있을 때는 이 요청이 전혀 발생하지 않는다.
+  useEffect(() => {
+    if (!selectedStock || selectedStock.status === 'error') {
+      setChartStatus('idle')
+      setChartCloses(null)
+      return
+    }
+
+    const code = selectedStock.code
+    const cached = chartCacheRef.current.get(code)
+    if (cached) {
+      setChartCloses(cached)
+      setChartStatus('success')
+      return
+    }
+
+    let cancelled = false
+    setChartStatus('loading')
+    setChartCloses(null)
+
+    fetch(`/api/stock/${code}/chart`)
+      .then((response) => {
+        if (!response.ok) throw new Error('차트 조회 실패')
+        return response.json()
+      })
+      .then((data) => {
+        if (cancelled) return
+        chartCacheRef.current.set(code, data.closes)
+        setChartCloses(data.closes)
+        setChartStatus('success')
+      })
+      .catch(() => {
+        if (!cancelled) setChartStatus('error')
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [selectedStock])
 
   useEffect(() => {
@@ -597,6 +685,25 @@ function App() {
                         기준 시각: {formatTimestamp(selectedStock.timestamp)}
                       </p>
                     )}
+
+                    <div className="stock-chart-section">
+                      <p className="stock-chart-title">최근 30거래일</p>
+                      {chartStatus === 'loading' && (
+                        <p className="stock-chart-status">차트 불러오는 중...</p>
+                      )}
+                      {chartStatus === 'error' && (
+                        <p className="stock-chart-status">차트를 불러오지 못했습니다</p>
+                      )}
+                      {chartStatus === 'success' && chartCloses && chartCloses.length >= 2 && (
+                        <>
+                          <StockChart closes={chartCloses} />
+                          <div className="stock-chart-range">
+                            <span>{formatPriceValue(chartCloses[0])}</span>
+                            <span>{formatPriceValue(chartCloses[chartCloses.length - 1])}</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </>
                 )
               })()

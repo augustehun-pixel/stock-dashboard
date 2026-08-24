@@ -125,6 +125,27 @@ async function getStockInfo(accessToken, code) {
   }
 }
 
+// 상세보기 차트 전용. 관심종목 목록/30초 자동 갱신이 쓰는 getStockInfo와는 완전히 분리된
+// 함수로 둬서, 차트 요청(count=30)이 자동 갱신 호출량에 섞여 들어가지 않게 한다.
+async function getStockChart(accessToken, code) {
+  const authHeader = { Authorization: `Bearer ${accessToken}` }
+
+  const candleRes = await fetchWithRetry(
+    `${TOSS_API_BASE}/api/v1/candles?symbol=${code}&interval=1d&count=30`,
+    { headers: authHeader },
+  )
+
+  if (!candleRes.ok) {
+    throw new Error(`차트 데이터 조회 실패 (HTTP ${candleRes.status})`)
+  }
+
+  const candleData = await candleRes.json()
+  const candles = candleData.result?.candles ?? []
+
+  // candles는 최신순(0번=오늘)으로 오므로, 차트는 과거→현재 순서로 보여주기 위해 뒤집는다.
+  return candles.map((candle) => Number(candle.closePrice)).reverse()
+}
+
 // 토스증권에는 "이름으로 검색"하는 공식 API가 없어서,
 // 시장 전체 목록(KOSPI+KOSDAQ, 개별 종목만)을 한 번 받아 메모리에 저장해두고
 // 그 목록 안에서 이름/코드를 직접 걸러내는 방식으로 검색을 구현한다.
@@ -205,6 +226,23 @@ const server = createServer(async (req, res) => {
       console.error('종목 검색 실패:', error.message)
       res.writeHead(502, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: '종목 검색에 실패했습니다.' }))
+    }
+    return
+  }
+
+  const chartMatch = req.url.match(/^\/api\/stock\/([A-Za-z0-9.-]+)\/chart$/)
+
+  if (req.method === 'GET' && chartMatch) {
+    const code = chartMatch[1]
+    try {
+      const accessToken = await getTossAccessToken()
+      const closes = await getStockChart(accessToken, code)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ closes }))
+    } catch (error) {
+      console.error('토스증권 차트 데이터 요청 실패:', error.message)
+      res.writeHead(502, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: '차트 데이터를 가져오지 못했습니다.' }))
     }
     return
   }

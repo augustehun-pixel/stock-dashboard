@@ -459,6 +459,51 @@
   margin: 0;
 }
 
+.stock-chart-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+}
+
+.stock-chart-title {
+  font-size: 12px;
+  color: #666;
+  margin: 0 0 8px;
+}
+
+.stock-chart-status {
+  font-size: 13px;
+  color: #999;
+  margin: 0;
+}
+
+/* viewBox 좌표계로 그려서 모달 폭에 맞게 자동으로 늘어나거나 줄어든다(가로 스크롤 없음). */
+.stock-chart {
+  display: block;
+  width: 100%;
+  height: 64px;
+}
+
+.stock-chart-line {
+  stroke-width: 2;
+}
+
+.stock-chart-line.positive {
+  stroke: var(--positive);
+}
+
+.stock-chart-line.negative {
+  stroke: var(--negative);
+}
+
+.stock-chart-range {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #666;
+}
+
 /* 상세보기 모달의 다크모드 전용 색상. 라이트모드 규칙은 위 그대로 두고,
    여기서는 관심종목 카드와 같은 다크 팔레트(배경/글자 단계)만 덧붙인다. */
 @media (prefers-color-scheme: dark) {
@@ -495,6 +540,19 @@
   }
 
   .stock-detail-timestamp {
+    color: #8b8f99;
+  }
+
+  .stock-chart-section {
+    border-top-color: #303034;
+  }
+
+  .stock-chart-title,
+  .stock-chart-range {
+    color: #a7abb5;
+  }
+
+  .stock-chart-status {
     color: #8b8f99;
   }
 }
