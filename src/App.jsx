@@ -75,6 +75,33 @@ function calculatePeriodReturn(closes) {
   return Number.isFinite(rate) ? rate : null
 }
 
+// chartCloses(선택된 기간의 종가 배열)만으로 기간 최저/최고가와, 그 범위 안에서
+// 현재가(가장 최근 종가)가 몇 %쯤 위치하는지 계산한다. 별도 API 호출은 하지 않는다.
+// 최고가==최저가(가격이 전혀 안 움직인 경우)처럼 나눗셈이 불가능하거나 결과가
+// NaN/Infinity가 되는 경우에는 위치값을 null로 돌려줘서 화면에 보여주지 않게 한다.
+function calculatePriceRange(closes) {
+  if (!Array.isArray(closes) || closes.length < 2) return null
+
+  const numericCloses = closes.map(Number)
+  if (numericCloses.some((value) => !Number.isFinite(value))) return null
+
+  const low = Math.min(...numericCloses)
+  const high = Math.max(...numericCloses)
+  const current = numericCloses[numericCloses.length - 1]
+
+  const span = high - low
+  let positionPercent = null
+  if (span > 0) {
+    const raw = ((current - low) / span) * 100
+    if (Number.isFinite(raw)) {
+      // 계산상 0~100을 살짝 벗어날 수 있는 경우까지 대비해 범위를 안전하게 고정한다.
+      positionPercent = Math.min(100, Math.max(0, raw))
+    }
+  }
+
+  return { low, high, positionPercent }
+}
+
 function formatPriceValue(value) {
   if (value === null || value === undefined) return '정보 없음'
   return `${Number(value).toLocaleString()}원`
@@ -159,6 +186,46 @@ function StockChart({ closes, periodLabel }) {
         className={`stock-chart-line ${isUp ? 'positive' : 'negative'}`}
       />
     </svg>
+  )
+}
+
+// 선택 기간의 최저/최고가와, 그 범위 안에서 현재가의 위치를 막대로 보여준다.
+// 상승/하락 판단이 아니라 "범위 안 어디쯤인가"를 보여주는 것이므로 positive/negative
+// 색상 대신 중립적인 색(텍스트/트랙 색)만 사용한다.
+function StockPriceRangeIndicator({ closes }) {
+  const range = calculatePriceRange(closes)
+  if (!range) return null
+
+  const { low, high, positionPercent } = range
+
+  return (
+    <div className="stock-price-range">
+      <div className="stock-price-range-labels">
+        <span>
+          기간 최저 <strong>{formatPriceValue(low)}</strong>
+        </span>
+        <span>
+          기간 최고 <strong>{formatPriceValue(high)}</strong>
+        </span>
+      </div>
+      {positionPercent !== null && (
+        <>
+          <div
+            className="stock-price-range-bar"
+            role="img"
+            aria-label={`기간 범위 중 현재 위치 ${Math.round(positionPercent)}%`}
+          >
+            <div className="stock-price-range-track">
+              <div
+                className="stock-price-range-dot"
+                style={{ left: `${positionPercent}%` }}
+              />
+            </div>
+          </div>
+          <p className="stock-price-range-position">현재 위치 {Math.round(positionPercent)}%</p>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -761,6 +828,7 @@ function App() {
                             <span>{formatPriceValue(chartCloses[0])}</span>
                             <span>{formatPriceValue(chartCloses[chartCloses.length - 1])}</span>
                           </div>
+                          <StockPriceRangeIndicator closes={chartCloses} />
                         </>
                       )}
                     </div>
