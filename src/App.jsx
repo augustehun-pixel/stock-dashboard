@@ -61,6 +61,20 @@ function getChangeDisplay(changeRate) {
   return { rate, changeClass, arrow }
 }
 
+// 차트에 이미 받아온 종가 배열의 첫 값과 마지막 값만으로 선택 기간 수익률을 계산한다.
+// 별도 API 호출은 하지 않는다. 데이터가 부족하거나 첫 종가가 0이라 나눗셈이 불가능한 경우,
+// 혹은 계산 결과가 NaN/Infinity가 되는 경우에는 화면에 절대 보여주지 않도록 null을 반환한다.
+function calculatePeriodReturn(closes) {
+  if (!Array.isArray(closes) || closes.length < 2) return null
+
+  const first = Number(closes[0])
+  const last = Number(closes[closes.length - 1])
+  if (!Number.isFinite(first) || !Number.isFinite(last) || first === 0) return null
+
+  const rate = ((last - first) / first) * 100
+  return Number.isFinite(rate) ? rate : null
+}
+
 function formatPriceValue(value) {
   if (value === null || value === undefined) return '정보 없음'
   return `${Number(value).toLocaleString()}원`
@@ -699,7 +713,20 @@ function App() {
 
                     <div className="stock-chart-section">
                       <div className="stock-chart-header">
-                        <p className="stock-chart-title">가격 추이</p>
+                        <div className="stock-chart-title-group">
+                          <p className="stock-chart-title">가격 추이</p>
+                          {chartStatus === 'success' &&
+                            (() => {
+                              const periodReturn = calculatePeriodReturn(chartCloses)
+                              if (periodReturn === null) return null
+                              const { changeClass } = getChangeDisplay(periodReturn)
+                              return (
+                                <span className={`stock-chart-return ${changeClass}`}>
+                                  {formatChangeRate(periodReturn)}
+                                </span>
+                              )
+                            })()}
+                        </div>
                         <div className="stock-chart-period-buttons" role="group" aria-label="차트 기간 선택">
                           {CHART_PERIODS.map((period) => (
                             <button

@@ -474,10 +474,23 @@
   margin-bottom: 8px;
 }
 
+.stock-chart-title-group {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
 .stock-chart-title {
   font-size: 12px;
   color: #666;
   margin: 0;
+}
+
+.stock-chart-return {
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .stock-chart-period-buttons {
