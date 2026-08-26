@@ -11,9 +11,11 @@ import { getTossAccessToken } from './tossClient.js'
 import { fetchMinuteCandles } from './minuteCandles.js'
 import { aggregateToFourHourCandles } from './fourHourCandles.js'
 
-// 목표: 4시간봉 최소 200개 이상(여유를 둬서 220개) 확보.
-// 정규장은 하루에 2개 구간(09:00~12:59, 13:00~15:30)뿐이므로 220개 = 110거래일 필요.
-const TARGET_FOUR_HOUR_CANDLES = 220
+// 목표: MA200이 처음 그려지는 데 4시간봉 200개(=100거래일)가 워밍업으로 필요하고,
+// 거기에 "일봉 MA200과 실제로 비교 가능한 기간"을 더해야 한다. 2단계 목표는 약 2년
+// (약 504거래일)치 비교 구간 확보이므로: 100(워밍업) + 504(비교) = 604거래일.
+// 정규장은 하루에 2개 구간(09:00~12:59, 13:00~15:30)이므로 604 * 2 = 1208개.
+const TARGET_FOUR_HOUR_CANDLES = 1208
 const TRADING_DAYS_NEEDED = Math.ceil(TARGET_FOUR_HOUR_CANDLES / 2)
 
 // 정규장은 하루 390분(09:00~15:30)이지만, 실제로는 시간외/연장거래 캔들도 섞여 들어오기

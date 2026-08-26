@@ -10,6 +10,7 @@ import { getDailyMA200Series } from './ma200Analysis.js'
 import { getFourHourCandles } from './fourHourCandleAnalysis.js'
 import { calculateMovingAverages } from './movingAverage.js'
 import { alignFourHourWithDailyMA200, detectCrossovers } from './maCrossoverSignal.js'
+import { findReferenceLow, listPostGoldenCrossHighCandidates } from './swingLevels.js'
 
 const MA_PERIOD = 200
 
@@ -35,5 +36,23 @@ export async function getCrossoverAnalysis(code) {
   const aligned = alignFourHourWithDailyMA200(fourHourSeriesWithMA, dailySeries)
   const { events, currentState, latest, latestGolden, latestDead } = detectCrossovers(aligned)
 
-  return { alignedCount: aligned.length, events, currentState, latest, latestGolden, latestDead, aligned }
+  // 가장 최근 골든크로스가 있을 때만 기준 저점/고점 후보를 계산한다.
+  // "가장 최근 고점"이 무엇인지는 아직 정의되지 않았으므로 후보 목록만 그대로 내려보낸다
+  // (여기서 그중 하나를 고르는 판단은 하지 않는다).
+  const referenceLow = latestGolden ? findReferenceLow(dailySeries, latestGolden.date) : null
+  const postGoldenCrossHighCandidates = latestGolden
+    ? listPostGoldenCrossHighCandidates(dailySeries, latestGolden.date)
+    : []
+
+  return {
+    alignedCount: aligned.length,
+    events,
+    currentState,
+    latest,
+    latestGolden,
+    latestDead,
+    aligned,
+    referenceLow,
+    postGoldenCrossHighCandidates,
+  }
 }

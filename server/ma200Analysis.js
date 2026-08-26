@@ -12,9 +12,11 @@ import { calculateMovingAverages } from './movingAverage.js'
 
 const MA_PERIOD = 200
 
-// 최근 30거래일치 MA200 선을 그리려면 200 + (30 - 1) = 229개의 종가가 필요하다.
-// 약간의 여유를 두되, 매번 4페이지(800개)씩 긁어오지 않도록 필요한 만큼만 잡는다.
-const MIN_DAILY_CANDLES = 240
+// 최근 30거래일치 MA200 선을 그리는 용도라면 200 + (30 - 1) = 229개면 충분하지만,
+// 일봉 vs 4시간봉 크로스오버 비교 구간(최대 604거래일, 2단계 목표인 2년치)의 모든
+// 지점에서 일봉 MA200도 확정되어 있어야 하므로, 그 구간 전체(604) + 일봉 MA200 자체의
+// 워밍업(200) = 최소 804개가 필요하다. 여유를 두어 900으로 잡는다.
+const MIN_DAILY_CANDLES = 900
 
 // 같은 종목을 짧은 시간 안에 다시 요청해도 매번 pagination을 반복하지 않도록
 // 아주 단순한 메모리 캐시를 둔다(서버가 켜져 있는 동안만 유지, 복잡한 무효화 로직 없음).
@@ -40,6 +42,8 @@ export async function getDailyMA200Series(code) {
   const series = candles.map((candle, index) => ({
     date: candle.date,
     close: candle.close,
+    high: candle.high,
+    low: candle.low,
     ma200: ma200Values[index],
   }))
 

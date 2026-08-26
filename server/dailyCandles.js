@@ -6,8 +6,11 @@
 import { TOSS_API_BASE, fetchWithRetry } from './tossClient.js'
 
 // 페이지를 무한정 넘기지 않도록 안전장치를 둔다(요청 과다 방지, rate limit 보호).
-// 페이지당 최대 200개이므로 5페이지면 최대 1000개까지 모을 수 있어 당분간 충분하다.
-const MAX_PAGES = 5
+// 페이지당 최대 200개이므로 6페이지면 최대 1200개까지 모을 수 있다.
+// (2년치 크로스오버 비교를 위해 MIN_DAILY_CANDLES가 900까지 늘어나 5페이지로는 여유가
+//  거의 없어져서, 최소한의 여유를 두려고 5 -> 6으로 올림. 적게 필요할 땐 기존처럼 적은
+//  페이지만 쓰이므로 다른 호출부 동작에는 영향 없다.)
+const MAX_PAGES = 6
 
 // minCount개 이상의 일봉을 모을 때까지, 혹은 더 가져올 데이터가 없을 때까지 페이지를 넘긴다.
 // 날짜(YYYY-MM-DD) 기준으로 중복을 제거하고, 오래된 날짜 -> 최신 날짜 순으로 정렬해 돌려준다.
@@ -45,7 +48,15 @@ export async function fetchDailyCandles(accessToken, code, minCount) {
     for (const candle of candles) {
       const date = candle.timestamp.slice(0, 10) // "YYYY-MM-DD"
       if (!collected.has(date)) {
-        collected.set(date, Number(candle.closePrice))
+        // close는 MA200 계산에, high/low는 골든크로스 기준 저점/고점 후보 탐색(swingLevels.js)에
+        // 쓰인다. 필드 이름(openPrice/highPrice/lowPrice/closePrice)은 실제 API 응답으로
+        // 이미 확인된 그대로 사용한다(추측 아님 - server/index.js의 getStockInfo에서도
+        // 같은 필드명으로 이미 정상 동작 중).
+        collected.set(date, {
+          close: Number(candle.closePrice),
+          high: Number(candle.highPrice),
+          low: Number(candle.lowPrice),
+        })
       }
     }
 
@@ -54,6 +65,6 @@ export async function fetchDailyCandles(accessToken, code, minCount) {
   }
 
   return Array.from(collected.entries())
-    .map(([date, close]) => ({ date, close }))
+    .map(([date, { close, high, low }]) => ({ date, close, high, low }))
     .sort((a, b) => a.date.localeCompare(b.date))
 }

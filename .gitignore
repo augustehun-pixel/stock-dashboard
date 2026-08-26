@@ -17,6 +17,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# 캔들 데이터 로컬 캐시 (시세 데이터만 저장, 비밀값 없음 - 그래도 커밋 대상 아님)
+server/.cache/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
