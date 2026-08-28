@@ -10,13 +10,18 @@
 import { getTossAccessToken } from './tossClient.js'
 import { fetchMinuteCandles } from './minuteCandles.js'
 import { aggregateToFourHourCandles } from './fourHourCandles.js'
+import { MIN_DAILY_CANDLES } from './ma200Analysis.js'
 
-// 목표: MA200이 처음 그려지는 데 4시간봉 200개(=100거래일)가 워밍업으로 필요하고,
-// 거기에 "일봉 MA200과 실제로 비교 가능한 기간"을 더해야 한다. 2단계 목표는 약 2년
-// (약 504거래일)치 비교 구간 확보이므로: 100(워밍업) + 504(비교) = 604거래일.
-// 정규장은 하루에 2개 구간(09:00~12:59, 13:00~15:30)이므로 604 * 2 = 1208개.
-const TARGET_FOUR_HOUR_CANDLES = 1208
-const TRADING_DAYS_NEEDED = Math.ceil(TARGET_FOUR_HOUR_CANDLES / 2)
+// 4시간봉 MA200이 "일봉 MA200이 유효한 구간 전체"를 놓치지 않고 덮어야, 오래된 골든/
+// 데드크로스도 놓치지 않는다(기존 604거래일 기준으로는 STX엔진의 2024-05-28 골든크로스가
+// 비교 구간 밖에 있어 탐지되지 않았던 사례로 확인됨). 최소 요구량 계산:
+//  - 일봉 MA200 워밍업: 200거래일 (calculateMovingAverages period=200)
+//  - 일봉 확보량: MIN_DAILY_CANDLES(900)거래일 -> 일봉 MA200 유효 구간 = 900 - 200 + 1 = 701거래일
+//  - 4시간봉 MA200 워밍업: 4시간봉 200개 = 100거래일 (정규장 하루 2구간: AM/PM)
+//  - 위 701거래일 전체를 4시간봉으로도 비교하려면 최소 100 + 701 = 801거래일치 원본 데이터 필요
+// MIN_DAILY_CANDLES를 그대로 재사용하면(900 >= 801) 항상 이 최소치를 만족하면서, 일봉 쪽
+// 깊이가 나중에 바뀌어도 두 파이프라인이 자동으로 같이 늘어나 다시 어긋나지 않는다.
+const TRADING_DAYS_NEEDED = MIN_DAILY_CANDLES
 
 // 정규장은 하루 390분(09:00~15:30)이지만, 실제로는 시간외/연장거래 캔들도 섞여 들어오기
 // 때문에(실측 확인) 같은 거래일 수를 확보하려면 원본 1분봉을 더 많이 받아야 한다.

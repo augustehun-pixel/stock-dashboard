@@ -13,10 +13,11 @@ import { calculateMovingAverages } from './movingAverage.js'
 const MA_PERIOD = 200
 
 // 최근 30거래일치 MA200 선을 그리는 용도라면 200 + (30 - 1) = 229개면 충분하지만,
-// 일봉 vs 4시간봉 크로스오버 비교 구간(최대 604거래일, 2단계 목표인 2년치)의 모든
-// 지점에서 일봉 MA200도 확정되어 있어야 하므로, 그 구간 전체(604) + 일봉 MA200 자체의
-// 워밍업(200) = 최소 804개가 필요하다. 여유를 두어 900으로 잡는다.
-const MIN_DAILY_CANDLES = 900
+// 이 값은 fourHourCandleAnalysis.js가 "일봉 MA200과 같은 깊이까지 4시간봉을 확보하는"
+// 기준으로도 그대로 재사용한다(두 파이프라인이 항상 같은 거래일 수를 보도록 export).
+// 900이라는 크기 자체에 특별한 의미는 없고, 넉넉한 여유치일 뿐이다 - 실제 최소
+// 요구량 계산 근거는 fourHourCandleAnalysis.js의 TRADING_DAYS_NEEDED 주석 참고.
+export const MIN_DAILY_CANDLES = 900
 
 // 같은 종목을 짧은 시간 안에 다시 요청해도 매번 pagination을 반복하지 않도록
 // 아주 단순한 메모리 캐시를 둔다(서버가 켜져 있는 동안만 유지, 복잡한 무효화 로직 없음).
