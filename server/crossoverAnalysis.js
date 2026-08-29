@@ -3,14 +3,16 @@
 // 그대로 재사용하고, 4시간봉에 MA200을 붙이는 것과 두 시리즈를 정렬/비교하는 것은
 // 각각 movingAverage.js / maCrossoverSignal.js에 맡긴다 - 이 파일은 조합만 한다.
 //
-// "최근", "임박", "불안정", Fibonacci, 매수/익절/손절 판단은 다음 단계에서 다룬다.
-// 이번 단계는 골든크로스/데드크로스 감지까지만 한다.
+// "최근", "임박", "불안정" 판단과 매수/익절/손절 규칙은 아직 다음 단계로 남아있다.
+// Fibonacci 레벨(0.5/0.618) 계산·도달·무효 판정은 fibonacciLevels.js에 위임해 조립만 함
+// (2026-08-29 세션에서 추가 - 계산 로직 자체는 이 파일에 없음, 순수 계산은 그쪽에 있음).
 
 import { getDailyMA200Series } from './ma200Analysis.js'
 import { getFourHourCandles } from './fourHourCandleAnalysis.js'
 import { calculateMovingAverages } from './movingAverage.js'
 import { alignFourHourWithDailyMA200, detectCrossovers } from './maCrossoverSignal.js'
 import { findReferenceLow, findConfirmedHigh, listPostGoldenCrossHighCandidates } from './swingLevels.js'
+import { calculateFibonacciAnalysis } from './fibonacciLevels.js'
 
 const MA_PERIOD = 200
 
@@ -46,6 +48,11 @@ export async function getCrossoverAnalysis(code) {
     ? listPostGoldenCrossHighCandidates(dailySeries, latestGolden.date)
     : []
 
+  const fibonacci =
+    latestGolden && referenceLow && confirmedHigh
+      ? calculateFibonacciAnalysis(dailySeries, latestGolden.date, referenceLow.low, confirmedHigh.high)
+      : null
+
   return {
     alignedCount: aligned.length,
     events,
@@ -57,5 +64,6 @@ export async function getCrossoverAnalysis(code) {
     referenceLow,
     confirmedHigh,
     postGoldenCrossHighCandidates,
+    fibonacci,
   }
 }
