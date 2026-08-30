@@ -16,6 +16,18 @@ const CHART_PERIODS = [
   { value: '6M', label: '6개월' },
 ]
 
+// 상단 필터 바의 UI 골격만 미리 만들어둔다. "전체"만 선택 가능하고 나머지는 비활성 상태로만
+// 보여준다 - 실제 정렬/필터 로직과 오더블럭/FVG/채널/추세선 같은 향후 분석 필터는 여기 배열에
+// 항목만 추가하면 되도록 자리를 남겨두는 목적이라, 지금은 클릭해도 아무 것도 하지 않는다.
+const WATCHLIST_FILTERS = [
+  { value: 'all', label: '전체' },
+  { value: 'price', label: '현재가' },
+  { value: 'changeRate', label: '등락률' },
+  { value: 'goldenCross', label: '골든크로스' },
+  { value: 'fibonacci', label: '피보나치' },
+  { value: 'structure', label: '구조 상태' },
+]
+
 // localStorage에는 종목코드 목록만 저장한다. 가격/등락률 같은 시세 데이터나
 // 비밀값은 절대 저장하지 않고, 새로고침 시 항상 서버에서 다시 받아온다.
 function loadWatchlistCodes() {
@@ -136,9 +148,16 @@ async function fetchStockData(code) {
   return {
     id: data.code,
     name: data.name,
+    // 로고 자리에 쓸 이니셜(getStockInitials)만을 위해 서버가 이미 내려주는 영문명을 추가로
+    // 담아둔다. 별도 API 호출은 없다 - 같은 /api/stock/:code 응답에 이미 있던 값이다.
+    englishName: data.englishName ?? null,
     code: data.code,
     market: data.market ?? null,
     price: `${Number(data.price).toLocaleString()}원`,
+    // 관심종목 목록의 당일 미니차트(시가→현재가 2점)에 쓸 원시 숫자값. 위 price는 이미
+    // "1,234원" 형식 문자열이라 계산에 쓸 수 없어 별도로 둔다. 새 계산 로직이 아니라
+    // 이미 구하고 있던 숫자(Number(data.price))를 그대로 한 번 더 노출하는 것뿐이다.
+    rawPrice: Number(data.price),
     changeRate: formatChangeRate(data.changeRate),
     openPrice: data.openPrice,
     highPrice: data.highPrice,
@@ -147,6 +166,30 @@ async function fetchStockData(code) {
     timestamp: data.timestamp,
     status: 'success',
   }
+}
+
+// 로고 이미지가 없을 때 쓸 원형 이니셜 placeholder. "SK하이닉스"처럼 이름 앞에 이미 영문
+// 브랜드 접두어가 붙어 있으면 그 접두어를 그대로 쓰고("SK"), 아니면 영문명(있으면)이나
+// 종목명의 첫 글자 하나만 쓴다("삼성전자"→영문명 SamsungElec의 "S", "NAVER"→"N").
+function getStockInitials(name, englishName) {
+  if (!name) return '?'
+  const latinPrefixMatch = name.match(/^[A-Za-z]+/)
+  if (latinPrefixMatch && latinPrefixMatch[0].length < name.length) {
+    return latinPrefixMatch[0].toUpperCase()
+  }
+  const source = englishName || name
+  return source.charAt(0).toUpperCase()
+}
+
+// 관심종목 행의 미니차트용 2점(시가→현재가)만 만든다. 여러 날짜 시세는 상세보기를 열 때만
+// 받아오므로(차트 API를 관심종목 전체에 반복 호출하지 않기 위해), 여기서는 이미 받아둔
+// 당일 시가/현재가만으로 방향성 정도만 보여준다.
+function getMiniChartCloses(stock) {
+  if (stock.openPrice === null || stock.openPrice === undefined) return null
+  if (stock.rawPrice === null || stock.rawPrice === undefined) return null
+  const open = Number(stock.openPrice)
+  if (!Number.isFinite(open) || !Number.isFinite(stock.rawPrice)) return null
+  return [open, stock.rawPrice]
 }
 
 // 골든크로스/기준저점/확정고점/피보나치 분석 결과를 서버에서 그대로 받아온다.
@@ -160,22 +203,30 @@ async function fetchGoldenCrossAnalysis(code) {
   return response.json()
 }
 
-// fibonacci 데이터(levelStatus.reached)만 문장으로 옮겨 적을 뿐,
-// 매수/매도 같은 새로운 판단 기준은 만들지 않는다.
-function buildReachSummary(fibonacci) {
-  const reached05 = fibonacci.levelStatus['0.5'].reached
-  const reached618 = fibonacci.levelStatus['0.618'].reached
-  return `0.5 ${reached05 ? '도달' : '미도달'} · 0.618 ${reached618 ? '도달' : '미도달'}`
-}
-
-// fibonacci 데이터(isValid/invalidatedDate/levelStatus)만 한 줄 요약으로 옮겨 적을 뿐,
+// fibonacci 데이터(isValid/invalidatedDate/levelStatus)만 문장으로 옮겨 적을 뿐,
 // 매수/매도 같은 새로운 판단 기준은 만들지 않는다.
 function buildGoldenCrossSummary(fibonacci) {
   if (!fibonacci) return ''
 
-  const validityText = fibonacci.isValid ? '구조 유효' : `구조 무효(${fibonacci.invalidatedDate})`
+  const validityText = fibonacci.isValid
+    ? '일봉 골든크로스 이후 구조가 유효한 상태입니다.'
+    : `일봉 골든크로스 이후 구조가 ${fibonacci.invalidatedDate}에 무효화되었습니다.`
 
-  return `${validityText} · ${buildReachSummary(fibonacci)}`
+  const reached05 = fibonacci.levelStatus['0.5'].reached
+  const reached618 = fibonacci.levelStatus['0.618'].reached
+
+  let reachText
+  if (reached05 && reached618) {
+    reachText = '0.5, 0.618 모두 도달했습니다.'
+  } else if (!reached05 && !reached618) {
+    reachText = '0.5, 0.618 모두 아직 도달하지 않았습니다.'
+  } else if (reached05) {
+    reachText = '0.5는 도달했고, 0.618은 아직 도달하지 않았습니다.'
+  } else {
+    reachText = '0.618은 도달했고, 0.5는 아직 도달하지 않았습니다.'
+  }
+
+  return `${validityText} ${reachText}`
 }
 
 // 선택된 기간의 종가로 아주 단순한 선 차트를 그린다. 새 라이브러리 없이 순수 SVG로 그린다.
@@ -306,15 +357,6 @@ function App() {
     setIsRefreshing(false)
   }, [])
 
-  useEffect(() => {
-    if (!selectedStock) return
-    function handleKeyDown(e) {
-      if (e.key === 'Escape') setSelectedStock(null)
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedStock])
-
   const [chartStatus, setChartStatus] = useState('idle') // idle | loading | success | error
   const [chartCloses, setChartCloses] = useState(null)
   const [chartPeriod, setChartPeriod] = useState('1M')
@@ -322,9 +364,9 @@ function App() {
   // 캐시(세션 동안만 메모리에 유지, localStorage에는 저장하지 않음). 키 예: "035420-1M".
   const chartCacheRef = useRef(new Map())
 
-  // 상세보기 모달을 열었을 때, 그리고 기간 버튼을 바꿀 때만 차트를 받아온다. 관심종목 목록의
-  // 30초 자동 갱신(refreshStocks)이나 수동 새로고침과는 완전히 분리돼 있어서, 카드 목록만
-  // 보고 있을 때는 이 요청이 전혀 발생하지 않는다.
+  // 종목을 선택해 우측 상세 패널을 채울 때, 그리고 기간 버튼을 바꿀 때만 차트를 받아온다.
+  // 관심종목 목록의 30초 자동 갱신(refreshStocks)이나 수동 새로고침과는 완전히 분리돼 있어서,
+  // 아직 아무 종목도 선택하지 않았을 때는 이 요청이 전혀 발생하지 않는다.
   useEffect(() => {
     if (!selectedStock || selectedStock.status === 'error') {
       setChartStatus('idle')
@@ -368,7 +410,7 @@ function App() {
   const [goldenCrossStatus, setGoldenCrossStatus] = useState('idle') // idle | loading | success | error
   const [goldenCrossData, setGoldenCrossData] = useState(null)
 
-  // 상세보기를 연 종목의 golden-cross 분석 결과를 받아온다. 종목을 바꾸면 이전 종목의
+  // 우측 패널에 선택된 종목의 golden-cross 분석 결과를 받아온다. 종목을 바꾸면 이전 종목의
   // loading/error/data를 먼저 초기화한 뒤 새로 요청하므로, 전환 중 이전 종목 데이터가
   // 잠깐이라도 화면에 남지 않는다.
   useEffect(() => {
@@ -596,7 +638,7 @@ function App() {
 
   function handleSelectStock(stock) {
     setSelectedStock(stock)
-    // 상세보기를 새로 열 때마다 차트 기간은 항상 1개월부터 시작한다.
+    // 우측 패널에 새 종목을 선택할 때마다 차트 기간은 항상 1개월부터 시작한다.
     setChartPeriod('1M')
   }
 
@@ -638,6 +680,24 @@ function App() {
         <h1>주식 시장 대시보드</h1>
       </header>
 
+      {/* 정렬/필터 UI 골격만. 지금은 "전체"만 선택 가능하고 실제 정렬 로직은 없다. */}
+      <div className="filter-bar" role="tablist" aria-label="관심종목 필터">
+        {WATCHLIST_FILTERS.map((filter) => (
+          <button
+            key={filter.value}
+            type="button"
+            className={`filter-bar-button${filter.value === 'all' ? ' active' : ''}`}
+            role="tab"
+            aria-selected={filter.value === 'all'}
+            disabled={filter.value !== 'all'}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="dashboard-layout">
+      <div className="dashboard-left">
       <section className="panel search-section">
         <input
           type="text"
@@ -702,17 +762,22 @@ function App() {
           <p className="status-message">불러오는 중...</p>
         ) : (
           <div className="stock-grid">
-            {filteredStocks.map((stock) => {
+            {filteredStocks.map((stock, index) => {
               const cardRefCallback = (node) => {
                 if (node) cardRefs.current.set(stock.id, node)
                 else cardRefs.current.delete(stock.id)
               }
               const isDragging = draggingId === stock.id
+              const isSelected = selectedStock?.id === stock.id
+              const rowClassName = `stock-card${isDragging ? ' stock-card--dragging' : ''}${
+                isSelected ? ' stock-card--selected' : ''
+              }`
+              const initials = getStockInitials(stock.name, stock.englishName)
 
               if (stock.status === 'error') {
                 return (
                   <div
-                    className={`stock-card${isDragging ? ' stock-card--dragging' : ''}`}
+                    className={rowClassName}
                     key={stock.id}
                     ref={cardRefCallback}
                     role="button"
@@ -724,25 +789,31 @@ function App() {
                     onPointerUp={handleCardPointerUp}
                     onPointerCancel={handleCardPointerCancel}
                   >
-                    <p className="stock-name">{stock.name} ({stock.code})</p>
-                    <p className="stock-error">가격 정보를 불러오지 못했습니다</p>
+                    <span className="watchlist-favorite" aria-hidden="true">♡</span>
+                    <span className="watchlist-rank">{index + 1}</span>
+                    <span className="watchlist-logo" aria-hidden="true">{initials}</span>
+                    <div className="watchlist-info">
+                      <p className="stock-name">{stock.code}</p>
+                    </div>
+                    <p className="stock-error watchlist-error-cell">가격 정보를 불러오지 못했습니다</p>
                     <button
                       type="button"
-                      className="delete-button"
+                      className="delete-button watchlist-delete"
                       onClick={(e) => handleDelete(stock.id, e)}
+                      aria-label="삭제"
                     >
-                      삭제
+                      ×
                     </button>
                   </div>
                 )
               }
 
-              const { rate, changeClass, arrow } = getChangeDisplay(stock.changeRate)
-              const isBigMove = rate !== null && Math.abs(rate) >= 1
+              const { rate, changeClass } = getChangeDisplay(stock.changeRate)
+              const miniChartCloses = getMiniChartCloses(stock)
 
               return (
                 <div
-                  className={`stock-card${isDragging ? ' stock-card--dragging' : ''}`}
+                  className={rowClassName}
                   key={stock.id}
                   ref={cardRefCallback}
                   role="button"
@@ -754,18 +825,29 @@ function App() {
                   onPointerUp={handleCardPointerUp}
                   onPointerCancel={handleCardPointerCancel}
                 >
-                  <p className="stock-name">{stock.name} ({stock.code})</p>
-                  <p className="stock-price">{stock.price}</p>
-                  <p className={`stock-change ${changeClass}`}>
-                    {rate === null ? '등락률 정보 없음' : `${arrow} ${stock.changeRate}`}
+                  <span className="watchlist-favorite" aria-hidden="true">♡</span>
+                  <span className="watchlist-rank">{index + 1}</span>
+                  <span className="watchlist-logo" aria-hidden="true">{initials}</span>
+                  <div className="watchlist-info">
+                    <p className="stock-name">{stock.name}</p>
+                    <span className="watchlist-code">{stock.code}</span>
+                  </div>
+                  <p className="stock-price watchlist-price">{stock.price}</p>
+                  <p className={`stock-change watchlist-change ${changeClass}`}>
+                    {rate === null ? '–' : stock.changeRate}
                   </p>
-                  {isBigMove && <p className="big-move-tag">큰 변동</p>}
+                  <div className="watchlist-mini-chart">
+                    {miniChartCloses && (
+                      <StockChart closes={miniChartCloses} periodLabel="당일" />
+                    )}
+                  </div>
                   <button
                     type="button"
-                    className="delete-button"
+                    className="delete-button watchlist-delete"
                     onClick={(e) => handleDelete(stock.id, e)}
+                    aria-label="삭제"
                   >
-                    삭제
+                    ×
                   </button>
                 </div>
               )
@@ -773,16 +855,11 @@ function App() {
           </div>
         )}
       </section>
+      </div>
 
-      {selectedStock && (
-        <div className="stock-detail-backdrop" onClick={() => setSelectedStock(null)}>
-          <div
-            className="stock-detail-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${selectedStock.name} 상세 정보`}
-            onClick={(e) => e.stopPropagation()}
-          >
+      <div className="dashboard-right">
+        {selectedStock ? (
+          <div className="stock-detail-panel" aria-label={`${selectedStock.name} 상세 정보`}>
             <div className="stock-detail-header">
               <div>
                 <h2>
@@ -790,14 +867,6 @@ function App() {
                 </h2>
                 {selectedStock.market && <p className="stock-detail-market">{selectedStock.market}</p>}
               </div>
-              <button
-                type="button"
-                className="stock-detail-close"
-                onClick={() => setSelectedStock(null)}
-                aria-label="닫기"
-              >
-                ✕
-              </button>
             </div>
 
             {selectedStock.status === 'error' ? (
@@ -907,7 +976,7 @@ function App() {
                       )}
                       {goldenCrossStatus === 'success' && goldenCrossData && goldenCrossData.latestGolden && (
                         <>
-                          {/* 1행: 언제(골든크로스) → 지금 구조가 어떤지(유효/무효) → 무효화됐다면 언제 순서로 읽힌다. */}
+                          {/* 1행: 골든크로스 날짜 → 기준 저점 → 확정 고점. */}
                           <div className="golden-cross-row">
                             <div className="golden-cross-cell golden-cross-cell--highlight">
                               <span className="golden-cross-label">골든크로스</span>
@@ -915,29 +984,6 @@ function App() {
                                 {goldenCrossData.latestGolden.date}
                               </span>
                             </div>
-                            <div className="golden-cross-cell">
-                              <span className="golden-cross-label">구조 유효 여부</span>
-                              <span
-                                className={`golden-cross-value ${
-                                  goldenCrossData.fibonacci?.isValid
-                                    ? 'golden-cross-value--valid'
-                                    : 'golden-cross-value--invalid'
-                                }`}
-                              >
-                                {goldenCrossData.fibonacci ? (goldenCrossData.fibonacci.isValid ? '유효' : '무효') : '정보 없음'}
-                              </span>
-                            </div>
-                            <div className="golden-cross-cell">
-                              <span className="golden-cross-label">무효화 날짜</span>
-                              <span className="golden-cross-value golden-cross-value--neutral">
-                                {goldenCrossData.fibonacci?.invalidatedDate ?? '없음'}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* 2행: 구조를 이룬 두 기준점(저점→고점). 저점/고점 사이 간격 정보는 API에
-                              아직 없으므로, 빈 칸을 채우지 않고 2칸만 둔다. */}
-                          <div className="golden-cross-row">
                             <div className="golden-cross-cell">
                               <span className="golden-cross-label">기준 저점</span>
                               {goldenCrossData.referenceLow ? (
@@ -966,55 +1012,77 @@ function App() {
                             </div>
                           </div>
 
-                          {/* 3행: 두 기준점에서 계산된 피보나치 레벨과, 각 레벨의 도달 상태를 같은
-                              카드 안에 함께 보여준다(0.5/0.618을 각각 구분). 항목이 2개뿐이라
-                              카드 하나가 차지하는 폭이 다른 행보다 넓어진다. */}
-                          <div className="golden-cross-row golden-cross-row--split">
+                          {/* 2행: 두 기준점에서 계산된 피보나치 레벨과 구조 유효 여부. */}
+                          <div className="golden-cross-row">
                             <div className="golden-cross-cell">
                               <span className="golden-cross-label">피보나치 0.5</span>
-                              {goldenCrossData.fibonacci ? (
-                                <>
-                                  <span className="golden-cross-value golden-cross-value--fib">
-                                    {formatPriceValue(goldenCrossData.fibonacci.fibonacciLevels['0.5'])}
-                                  </span>
-                                  <span
-                                    className={`golden-cross-reach ${
-                                      goldenCrossData.fibonacci.levelStatus['0.5'].reached
-                                        ? 'golden-cross-reach--reached'
-                                        : 'golden-cross-reach--neutral'
-                                    }`}
-                                  >
-                                    {goldenCrossData.fibonacci.levelStatus['0.5'].reached
-                                      ? `0.5 도달 (${goldenCrossData.fibonacci.levelStatus['0.5'].firstReachedDate})`
-                                      : '0.5 미도달'}
-                                  </span>
-                                </>
-                              ) : (
-                                <span className="golden-cross-value golden-cross-value--neutral">정보 없음</span>
-                              )}
+                              <span className="golden-cross-value golden-cross-value--fib">
+                                {goldenCrossData.fibonacci
+                                  ? formatPriceValue(goldenCrossData.fibonacci.fibonacciLevels['0.5'])
+                                  : '정보 없음'}
+                              </span>
                             </div>
                             <div className="golden-cross-cell">
                               <span className="golden-cross-label">피보나치 0.618</span>
-                              {goldenCrossData.fibonacci ? (
-                                <>
-                                  <span className="golden-cross-value golden-cross-value--fib">
-                                    {formatPriceValue(goldenCrossData.fibonacci.fibonacciLevels['0.618'])}
-                                  </span>
-                                  <span
-                                    className={`golden-cross-reach ${
-                                      goldenCrossData.fibonacci.levelStatus['0.618'].reached
-                                        ? 'golden-cross-reach--reached'
-                                        : 'golden-cross-reach--neutral'
-                                    }`}
-                                  >
-                                    {goldenCrossData.fibonacci.levelStatus['0.618'].reached
-                                      ? `0.618 도달 (${goldenCrossData.fibonacci.levelStatus['0.618'].firstReachedDate})`
-                                      : '0.618 미도달'}
-                                  </span>
-                                </>
-                              ) : (
-                                <span className="golden-cross-value golden-cross-value--neutral">정보 없음</span>
-                              )}
+                              <span className="golden-cross-value golden-cross-value--fib">
+                                {goldenCrossData.fibonacci
+                                  ? formatPriceValue(goldenCrossData.fibonacci.fibonacciLevels['0.618'])
+                                  : '정보 없음'}
+                              </span>
+                            </div>
+                            <div className="golden-cross-cell">
+                              <span className="golden-cross-label">구조 유효 여부</span>
+                              <span
+                                className={`golden-cross-value ${
+                                  goldenCrossData.fibonacci?.isValid
+                                    ? 'golden-cross-value--valid'
+                                    : 'golden-cross-value--invalid'
+                                }`}
+                              >
+                                {goldenCrossData.fibonacci ? (goldenCrossData.fibonacci.isValid ? '유효' : '무효') : '정보 없음'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* 3행: 0.5/0.618 각각의 도달 상태와 무효화 날짜(있으면). */}
+                          <div className="golden-cross-row">
+                            <div className="golden-cross-cell">
+                              <span className="golden-cross-label">0.5 도달 상태</span>
+                              <span
+                                className={`golden-cross-value ${
+                                  goldenCrossData.fibonacci?.levelStatus['0.5'].reached
+                                    ? 'golden-cross-value--valid'
+                                    : 'golden-cross-value--neutral'
+                                }`}
+                              >
+                                {goldenCrossData.fibonacci
+                                  ? goldenCrossData.fibonacci.levelStatus['0.5'].reached
+                                    ? goldenCrossData.fibonacci.levelStatus['0.5'].firstReachedDate
+                                    : '미도달'
+                                  : '정보 없음'}
+                              </span>
+                            </div>
+                            <div className="golden-cross-cell">
+                              <span className="golden-cross-label">0.618 도달 상태</span>
+                              <span
+                                className={`golden-cross-value ${
+                                  goldenCrossData.fibonacci?.levelStatus['0.618'].reached
+                                    ? 'golden-cross-value--valid'
+                                    : 'golden-cross-value--neutral'
+                                }`}
+                              >
+                                {goldenCrossData.fibonacci
+                                  ? goldenCrossData.fibonacci.levelStatus['0.618'].reached
+                                    ? goldenCrossData.fibonacci.levelStatus['0.618'].firstReachedDate
+                                    : '미도달'
+                                  : '정보 없음'}
+                              </span>
+                            </div>
+                            <div className="golden-cross-cell">
+                              <span className="golden-cross-label">무효화 날짜</span>
+                              <span className="golden-cross-value golden-cross-value--neutral">
+                                {goldenCrossData.fibonacci?.invalidatedDate ?? '없음'}
+                              </span>
                             </div>
                           </div>
 
@@ -1031,8 +1099,13 @@ function App() {
               })()
             )}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="stock-detail-empty">
+            <p>왼쪽에서 종목을 선택하면 상세 정보가 여기에 표시됩니다.</p>
+          </div>
+        )}
+      </div>
+      </div>
     </div>
   )
 }

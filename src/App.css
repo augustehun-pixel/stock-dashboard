@@ -1,32 +1,35 @@
 .app-shell {
-  /* 색상 계층을 한곳에서 관리하는 변수. 라이트모드 기본값은 지금까지 쓰던 색과 동일하게
-     맞춰서 라이트모드 화면은 바뀌지 않게 하고, 다크모드 값만 아래 @media 블록에서 따로 정한다.
-     단계: 페이지(가장 어두움) < 섹션/입력 < 카드 < 버튼(가장 밝음) 순으로 밝기가 이어지게 한다. */
-  --page-bg: #ffffff;
-  --section-bg: #fafafa;
-  --section-border: #e0e0e0;
-  --input-bg: #ffffff;
-  --input-border: #e0e0e0;
-  --card-bg: #ffffff;
-  --card-shadow: 0 1px 2px rgba(15, 15, 20, 0.04), 0 4px 12px rgba(15, 15, 20, 0.06);
-  --card-shadow-hover: 0 2px 4px rgba(15, 15, 20, 0.06), 0 8px 20px rgba(15, 15, 20, 0.08);
-  --control-bg: #f3f4f6;
-  --primary-bg: #eaf3ff;
-  --primary-bg-hover: #dcebff;
-  --primary-border: #90c2ff;
-  --primary-text: #1a6fd6;
-  --input-bg-hover: #f0f7ff;
-  --text-primary: #171717;
-  --text-secondary: #6b7280;
-  --text-tertiary: #999999;
-  --positive: red;
-  --negative: blue;
-  --gc-fib: #b45309;
-  --gc-valid: #15803d;
-  --gc-invalid: #c0392b;
+  /* 색상 계층을 한곳에서 관리하는 변수. 이 앱은 시스템 설정과 무관하게 항상 다크 테마로
+     고정한다(라이트 분기 없음). 단계: 페이지(가장 어두움, 남색 기가 도는 검정)
+     < 섹션/입력 < 카드(한 단계 밝은 다크톤) < 버튼(가장 밝음) 순으로 밝기가 이어지게 한다. */
+  --page-bg: #0a0e17;
+  --section-bg: #131a29;
+  --section-border: #232c40;
+  --input-bg: #131a29;
+  --input-border: #2a3348;
+  --input-bg-hover: #1a2338;
+  --card-bg: #161d2e;
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 4px 14px rgba(0, 0, 0, 0.55);
+  --card-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.55), 0 8px 22px rgba(0, 0, 0, 0.6);
+  --control-bg: #1c2438;
+  --primary-bg: #16283f;
+  --primary-bg-hover: #1c3350;
+  --primary-border: #3f6fa0;
+  --primary-text: #8fc4ff;
+  /* 주요 텍스트는 완전한 흰색(#fff) 대신 살짝 낮춘 오프화이트를 써서 너무 밝지 않게 한다. */
+  --text-primary: #e5e8ef;
+  --text-secondary: #97a1b5;
+  --text-tertiary: #6b7488;
+  --positive: #ff6b6b;
+  --negative: #6ea8fe;
+  --gc-fib: #fbbf24;
+  --gc-valid: #4ade80;
+  --gc-invalid: #ff6b6b;
+  --gc-highlight-bg: rgba(74, 222, 128, 0.14);
+  --gc-highlight-border: rgba(74, 222, 128, 0.4);
 
   background: var(--page-bg);
-  max-width: 960px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 24px 20px 48px;
   text-align: left;
@@ -34,43 +37,49 @@
   width: 100%;
 }
 
-@media (prefers-color-scheme: dark) {
-  .app-shell {
-    --page-bg: #121214;
-    --section-bg: #1c1c1f;
-    --section-border: #303034;
-    --input-bg: #1c1c1f;
-    --input-border: #38383d;
-    --card-bg: #242530;
-    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 14px rgba(0, 0, 0, 0.4);
-    --card-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 22px rgba(0, 0, 0, 0.45);
-    --control-bg: #3a3b46;
-    --primary-bg: #1d3a5c;
-    --primary-bg-hover: #244a6e;
-    --primary-border: #3f6fa0;
-    --primary-text: #8fc4ff;
-    --input-bg-hover: #24252b;
-    --text-primary: #f2f2f5;
-    --text-secondary: #a7abb5;
-    --text-tertiary: #8b8f99;
-    --positive: #ff6b6b;
-    --negative: #6ea8fe;
-    --gc-fib: #fbbf24;
-    --gc-valid: #4ade80;
-    --gc-invalid: #ff6b6b;
-  }
-}
-
 .app-header {
   margin-bottom: 24px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--section-border);
 }
 
 .app-header h1 {
   font-size: 28px;
   margin: 0;
   letter-spacing: normal;
+}
+
+/* 정렬/필터 바 골격. "전체"만 실제로 선택 가능하고 나머지는 disabled 상태로만 보여준다
+   (실제 정렬 로직 없음). 오더블럭/FVG/채널/추세선 같은 향후 분석 필터는 WATCHLIST_FILTERS
+   배열에 항목만 추가하면 되고, flex-wrap이라 늘어나도 줄바꿈되며 자연스럽게 자리가 생긴다. */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.filter-bar-button {
+  min-height: 32px;
+  padding: 6px 14px;
+  border: 1px solid var(--input-border);
+  border-radius: 999px;
+  background: var(--input-bg);
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: not-allowed;
+}
+
+.filter-bar-button.active {
+  border-color: var(--primary-border);
+  background: var(--primary-bg);
+  color: var(--primary-text);
+  cursor: default;
+}
+
+.filter-bar-button:disabled {
+  opacity: 0.55;
 }
 
 /* 모든 실제 버튼(<button>)에 공통으로 적용되는 눌림 피드백.
@@ -87,6 +96,27 @@
 @media (prefers-reduced-motion: reduce) {
   .app-shell button:not(:disabled):active {
     transform: none;
+  }
+}
+
+/* 왼쪽(관심종목 목록) 38% / 오른쪽(선택 종목 상세) 62% 2단 대시보드. iPad 가로 폭 기준으로
+   나눈 비율이고, 화면이 좁아지면(태블릿 세로 이하) 세로 1열로 쌓인다. 오른쪽 상세 패널은
+   더 이상 모달이 아니라 이 그리드의 두 번째 칸에 항상 떠 있는 카드다. */
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: 38fr 62fr;
+  align-items: start;
+  gap: 20px;
+}
+
+.dashboard-left,
+.dashboard-right {
+  min-width: 0;
+}
+
+@media (max-width: 840px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -121,7 +151,7 @@
 
 .watchlist-count {
   font-size: 14px;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .manual-refresh-button {
@@ -162,7 +192,7 @@
 }
 
 .status-message {
-  color: #666;
+  color: var(--text-secondary);
   padding: 24px 0;
 }
 
@@ -240,33 +270,46 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #e6f0ff;
-  color: #1a6fd6;
+  background: var(--primary-bg);
+  color: var(--primary-text);
   font-weight: bold;
   flex-shrink: 0;
 }
 
 .add-error {
-  color: #c0392b;
+  color: var(--gc-invalid);
   font-size: 14px;
   margin: 12px 0 0;
 }
 
+/* 카드형 타일 목록 대신, 세로로 쌓이는 compact row 목록. 한 화면에 최대한 많은
+   관심종목이 보이도록 한 종목당 높이를 크게 줄인다. */
 .stock-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
+/* 8개 열(즐겨찾기/순위/로고/종목정보/현재가/등락률/미니차트/삭제)을 고정 폭 그리드로 정렬한다.
+   각 자식 요소가 grid-column으로 자기 열을 직접 지정하므로, 오류 행처럼 일부 열(현재가/등락률/
+   미니차트)을 하나로 합쳐 표시해도 나머지 열의 정렬은 흐트러지지 않는다. */
 .stock-card {
   /* 카드 표면 색/그림자는 .app-shell에 모아둔 변수를 그대로 물려받아 쓴다(값은 거기 한 곳에서만 관리). */
   background: var(--card-bg);
   box-shadow: var(--card-shadow);
-  border-radius: 14px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  border-radius: 10px;
+  /* 선택 시에도 크기가 흔들리지 않도록, 선택 전부터 투명 테두리를 같은 두께로 깔아둔다. */
+  border: 2px solid transparent;
+  padding: 6px 8px;
+  min-height: 48px;
+  box-sizing: border-box;
+  display: grid;
+  /* 현재가 열(82px)은 "1,658,000원"처럼 7자리 가격까지 겹치지 않게 여유를 두고,
+     등락률 열(52px)은 그 옆에 완전히 분리된 자기 칸을 갖는다(둘 다 고정 폭 + 오른쪽 정렬이라
+     어떤 종목이든 같은 x축에 정렬된다). */
+  grid-template-columns: 14px 16px 26px minmax(0, 1fr) 82px 52px 40px 22px;
+  align-items: center;
+  column-gap: 6px;
   cursor: pointer;
   /* 세로 스크롤은 그대로 허용하되, 드래그가 시작되면 preventDefault로 직접 막는다. */
   touch-action: pan-y;
@@ -280,8 +323,15 @@
   box-shadow: var(--card-shadow-hover);
 }
 
+/* 오른쪽 상세 패널에 지금 표시 중인 종목의 카드. 파란 계열로 강조해서 어느 카드를
+   선택했는지 목록만 보고도 바로 알 수 있게 한다. */
+.stock-card--selected {
+  border-color: var(--primary-border);
+  background: var(--primary-bg);
+}
+
 .stock-card:focus-visible {
-  outline: 2px solid #90c2ff;
+  outline: 2px solid var(--primary-border);
   outline-offset: 2px;
 }
 
@@ -289,24 +339,114 @@
   position: relative;
   z-index: 10;
   transform: scale(1.03);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
   opacity: 0.9;
 }
 
-.stock-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
+/* 즐겨찾기 아이콘·순위·로고: 지금은 표시만 하는 자리(즐겨찾기는 아직 동작하는 기능이 아님). */
+.watchlist-favorite {
+  grid-column: 1;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-tertiary);
 }
 
-.stock-price {
-  font-size: 20px;
+.watchlist-rank {
+  grid-column: 2;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+/* 실제 로고 URL이 API 응답에 없어서(englishName만 있음) 원형 이니셜로 대신한다.
+   은은한 그라디언트 + 얇은 테두리로 진짜 로고 자리처럼 보이게만 다듬었다. */
+.watchlist-logo {
+  grid-column: 3;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, var(--control-bg), var(--section-bg));
+  border: 1px solid var(--section-border);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* 종목명 위, 종목코드 아래 2줄로만 압축한 정보 블록. 현재가/등락률은 각자의 열로 분리했다. */
+.watchlist-info {
+  grid-column: 4;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+
+.watchlist-code {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.watchlist-price {
+  grid-column: 5;
+  text-align: right;
+}
+
+.watchlist-change {
+  grid-column: 6;
+  text-align: right;
+}
+
+.watchlist-mini-chart {
+  grid-column: 7;
+  width: 40px;
+  height: 22px;
+}
+
+/* StockChart는 기본 64px 높이로 그려지므로(.stock-chart), 미니차트 안에서만 더 작게 줄인다. */
+.watchlist-mini-chart .stock-chart {
+  height: 22px;
+}
+
+/* 현재가/등락률/미니차트 3개 열을 하나로 합쳐 쓰는 오류 행 전용 칸. */
+.watchlist-error-cell {
+  grid-column: 5 / 8;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stock-name {
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 현재가는 항상 숫자만 명확하게 보이도록 굵게, 등락률은 위/아래/보합에 따라 색만 바뀐다
+   (positive=빨강=상승, negative=파랑=하락, neutral=중립=보합 — 상세 패널과 동일한 의미). */
+.stock-price {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .stock-change {
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .stock-error {
@@ -326,21 +466,7 @@
   color: var(--text-secondary);
 }
 
-.big-move-tag {
-  display: inline-block;
-  align-self: flex-start;
-  font-size: 12px;
-  color: var(--text-secondary);
-  background: var(--control-bg);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
 .delete-button {
-  align-self: flex-start;
-  margin-top: 8px;
-  min-height: 44px;
-  padding: 8px 14px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: var(--control-bg);
@@ -350,74 +476,65 @@
 }
 
 .delete-button:hover {
-  background: #fdf1f1;
-  border-color: #e6b3b3;
-  color: #c0392b;
+  background: rgba(255, 107, 107, 0.12);
+  border-color: rgba(255, 107, 107, 0.4);
+  color: var(--gc-invalid);
 }
 
-.stock-detail-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  box-sizing: border-box;
-  z-index: 100;
+/* compact row 안에서만 삭제 버튼을 작은 아이콘 버튼(×)으로 줄인다. */
+.watchlist-delete {
+  grid-column: 8;
+  width: 22px;
+  height: 22px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  justify-self: end;
 }
 
-.stock-detail-modal {
-  background: #ffffff;
-  border-radius: 12px;
+/* 오른쪽 상세 패널. 예전에는 화면 위에 뜨는 모달 카드였지만, 이제는 대시보드 오른쪽
+   칸에 항상 자리잡은 카드다. 색은 전부 .app-shell 변수를 물려받으므로 다크모드 전용
+   오버라이드가 따로 필요 없다(카드 목록의 .stock-card와 같은 원리). */
+.stock-detail-panel {
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  border-radius: 14px;
   padding: 20px;
-  width: 100%;
-  max-width: 420px;
-  max-height: 85vh;
-  overflow-y: auto;
   box-sizing: border-box;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+}
+
+.stock-detail-empty {
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  border-radius: 14px;
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
 .stock-detail-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
   margin-bottom: 16px;
 }
 
 .stock-detail-header h2 {
   font-size: 20px;
   margin: 0;
+  color: var(--text-primary);
 }
 
 .stock-detail-code {
   font-size: 14px;
   font-weight: 400;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .stock-detail-market {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #666;
-}
-
-.stock-detail-close {
-  min-width: 44px;
-  min-height: 44px;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  background: #ffffff;
-  cursor: pointer;
-  font-size: 16px;
-  color: #555;
-  flex-shrink: 0;
-}
-
-.stock-detail-close:hover {
-  background: #f5f5f5;
+  color: var(--text-secondary);
 }
 
 .stock-detail-price-row {
@@ -431,6 +548,7 @@
 .stock-detail-price {
   font-size: 26px;
   font-weight: 700;
+  color: var(--text-primary);
 }
 
 .stock-detail-grid {
@@ -441,15 +559,15 @@
 }
 
 .stock-detail-grid div {
-  background: #fafafa;
-  border: 1px solid #eee;
+  background: var(--section-bg);
+  border: 1px solid var(--section-border);
   border-radius: 8px;
   padding: 10px 12px;
 }
 
 .stock-detail-grid dt {
   font-size: 12px;
-  color: #666;
+  color: var(--text-secondary);
   margin-bottom: 4px;
 }
 
@@ -457,18 +575,19 @@
   margin: 0;
   font-size: 15px;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .stock-detail-timestamp {
   font-size: 12px;
-  color: #999;
+  color: var(--text-tertiary);
   margin: 0;
 }
 
 .stock-chart-section {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--input-border);
 }
 
 .stock-chart-header {
@@ -490,7 +609,7 @@
 
 .stock-chart-title {
   font-size: 12px;
-  color: #666;
+  color: var(--text-secondary);
   margin: 0;
 }
 
@@ -526,11 +645,11 @@
 
 .stock-chart-status {
   font-size: 13px;
-  color: #999;
+  color: var(--text-tertiary);
   margin: 0;
 }
 
-/* viewBox 좌표계로 그려서 모달 폭에 맞게 자동으로 늘어나거나 줄어든다(가로 스크롤 없음). */
+/* viewBox 좌표계로 그려서 패널 폭에 맞게 자동으로 늘어나거나 줄어든다(가로 스크롤 없음). */
 .stock-chart {
   display: block;
   width: 100%;
@@ -554,7 +673,7 @@
   justify-content: space-between;
   margin-top: 6px;
   font-size: 12px;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 /* 기간 최저/최고 + 현재 위치. 상승/하락 판단이 아니라 범위 안 위치를 보여주는
@@ -650,12 +769,6 @@
   }
 }
 
-/* 피보나치 0.5/0.618 카드는 항목이 2개뿐이라, 3열이 아니라 2열로 나눠 각 카드가
-   더 넓게(줄 폭의 절반) 차지하게 한다. */
-.golden-cross-row--split {
-  grid-template-columns: repeat(2, 1fr);
-}
-
 .golden-cross-cell {
   display: flex;
   flex-direction: column;
@@ -667,9 +780,11 @@
   padding: 8px 10px;
 }
 
+/* 골든크로스 날짜 카드만 초록 계열로 강조한다(기준 저점=파랑, 확정 고점=빨강과
+   구분되는 별도 톤). */
 .golden-cross-cell--highlight {
-  background: var(--primary-bg);
-  border-color: var(--primary-border);
+  background: var(--gc-highlight-bg);
+  border-color: var(--gc-highlight-border);
 }
 
 .golden-cross-label {
@@ -697,7 +812,7 @@
 .golden-cross-value--highlight {
   font-size: 17px;
   font-weight: 800;
-  color: var(--primary-text);
+  color: var(--gc-valid);
 }
 
 .golden-cross-value--low {
@@ -725,80 +840,11 @@
   font-weight: 600;
 }
 
-/* 피보나치 카드 안에서 가격(golden-cross-value) 아래에 붙는 0.5/0.618 개별 도달 상태.
-   가격보다 한 단계 작게 둬서 "얼마 → 도달했는지" 읽는 순서를 유지한다. */
-.golden-cross-reach {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.golden-cross-reach--reached {
-  color: var(--gc-valid);
-}
-
-.golden-cross-reach--neutral {
-  color: var(--text-secondary);
-}
-
 .golden-cross-summary {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   font-size: 13px;
-  font-weight: 600;
   color: var(--text-secondary);
-  line-height: 1.3;
-}
-
-/* 상세보기 모달의 다크모드 전용 색상. 라이트모드 규칙은 위 그대로 두고,
-   여기서는 관심종목 카드와 같은 다크 팔레트(배경/글자 단계)만 덧붙인다. */
-@media (prefers-color-scheme: dark) {
-  .stock-detail-modal {
-    background: #242530;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-  }
-
-  .stock-detail-header h2,
-  .stock-detail-price,
-  .stock-detail-grid dd {
-    color: #f2f2f5;
-  }
-
-  .stock-detail-code,
-  .stock-detail-market,
-  .stock-detail-grid dt {
-    color: #a7abb5;
-  }
-
-  .stock-detail-close {
-    background: #3a3b46;
-    border-color: #48495a;
-    color: #f2f2f5;
-  }
-
-  .stock-detail-close:hover {
-    background: #454654;
-  }
-
-  .stock-detail-grid div {
-    background: #1c1c1f;
-    border-color: #303034;
-  }
-
-  .stock-detail-timestamp {
-    color: #8b8f99;
-  }
-
-  .stock-chart-section {
-    border-top-color: #303034;
-  }
-
-  .stock-chart-title,
-  .stock-chart-range {
-    color: #a7abb5;
-  }
-
-  .stock-chart-status {
-    color: #8b8f99;
-  }
+  line-height: 1.4;
 }
 
 @media (max-width: 480px) {
