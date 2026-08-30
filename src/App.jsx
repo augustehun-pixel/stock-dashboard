@@ -149,6 +149,35 @@ async function fetchStockData(code) {
   }
 }
 
+// 골든크로스/기준저점/확정고점/피보나치 분석 결과를 서버에서 그대로 받아온다.
+// 서버(getCrossoverAnalysis)가 이미 계산을 끝낸 값을 그대로 전달할 뿐, 여기서는
+// 아무 계산도 하지 않는다.
+async function fetchGoldenCrossAnalysis(code) {
+  const response = await fetch(`/api/stock/${code}/golden-cross`)
+  if (!response.ok) {
+    throw new Error('골든크로스 분석 정보를 가져오지 못했습니다')
+  }
+  return response.json()
+}
+
+// fibonacci 데이터(levelStatus.reached)만 문장으로 옮겨 적을 뿐,
+// 매수/매도 같은 새로운 판단 기준은 만들지 않는다.
+function buildReachSummary(fibonacci) {
+  const reached05 = fibonacci.levelStatus['0.5'].reached
+  const reached618 = fibonacci.levelStatus['0.618'].reached
+  return `0.5 ${reached05 ? '도달' : '미도달'} · 0.618 ${reached618 ? '도달' : '미도달'}`
+}
+
+// fibonacci 데이터(isValid/invalidatedDate/levelStatus)만 한 줄 요약으로 옮겨 적을 뿐,
+// 매수/매도 같은 새로운 판단 기준은 만들지 않는다.
+function buildGoldenCrossSummary(fibonacci) {
+  if (!fibonacci) return ''
+
+  const validityText = fibonacci.isValid ? '구조 유효' : `구조 무효(${fibonacci.invalidatedDate})`
+
+  return `${validityText} · ${buildReachSummary(fibonacci)}`
+}
+
 // 선택된 기간의 종가로 아주 단순한 선 차트를 그린다. 새 라이브러리 없이 순수 SVG로 그린다.
 // viewBox 좌표계(0~100, 0~32)를 쓰고 CSS로 실제 크기를 맞추기 때문에, 모달 폭에 맞게
 // 알아서 늘어나거나 줄어들고 가로 스크롤이 생기지 않는다.
@@ -335,6 +364,38 @@ function App() {
       cancelled = true
     }
   }, [selectedStock, chartPeriod])
+
+  const [goldenCrossStatus, setGoldenCrossStatus] = useState('idle') // idle | loading | success | error
+  const [goldenCrossData, setGoldenCrossData] = useState(null)
+
+  // 상세보기를 연 종목의 golden-cross 분석 결과를 받아온다. 종목을 바꾸면 이전 종목의
+  // loading/error/data를 먼저 초기화한 뒤 새로 요청하므로, 전환 중 이전 종목 데이터가
+  // 잠깐이라도 화면에 남지 않는다.
+  useEffect(() => {
+    if (!selectedStock) {
+      setGoldenCrossStatus('idle')
+      setGoldenCrossData(null)
+      return
+    }
+
+    let cancelled = false
+    setGoldenCrossStatus('loading')
+    setGoldenCrossData(null)
+
+    fetchGoldenCrossAnalysis(selectedStock.code)
+      .then((data) => {
+        if (cancelled) return
+        setGoldenCrossData(data)
+        setGoldenCrossStatus('success')
+      })
+      .catch(() => {
+        if (!cancelled) setGoldenCrossStatus('error')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedStock])
 
   useEffect(() => {
     async function loadInitialStocks() {
@@ -829,6 +890,139 @@ function App() {
                             <span>{formatPriceValue(chartCloses[chartCloses.length - 1])}</span>
                           </div>
                           <StockPriceRangeIndicator closes={chartCloses} />
+                        </>
+                      )}
+                    </div>
+
+                    <div className="golden-cross-panel">
+                      <p className="golden-cross-panel-title">골든크로스 분석 (일봉 기준)</p>
+                      {goldenCrossStatus === 'loading' && (
+                        <p className="stock-chart-status">골든크로스 분석 불러오는 중...</p>
+                      )}
+                      {goldenCrossStatus === 'error' && (
+                        <p className="stock-chart-status">골든크로스 분석 정보를 가져오지 못했습니다</p>
+                      )}
+                      {goldenCrossStatus === 'success' && goldenCrossData && !goldenCrossData.latestGolden && (
+                        <p className="stock-chart-status">분석 가능한 골든크로스가 없습니다.</p>
+                      )}
+                      {goldenCrossStatus === 'success' && goldenCrossData && goldenCrossData.latestGolden && (
+                        <>
+                          {/* 1행: 언제(골든크로스) → 지금 구조가 어떤지(유효/무효) → 무효화됐다면 언제 순서로 읽힌다. */}
+                          <div className="golden-cross-row">
+                            <div className="golden-cross-cell golden-cross-cell--highlight">
+                              <span className="golden-cross-label">골든크로스</span>
+                              <span className="golden-cross-value golden-cross-value--highlight">
+                                {goldenCrossData.latestGolden.date}
+                              </span>
+                            </div>
+                            <div className="golden-cross-cell">
+                              <span className="golden-cross-label">구조 유효 여부</span>
+                              <span
+                                className={`golden-cross-value ${
+                                  goldenCrossData.fibonacci?.isValid
+                                    ? 'golden-cross-value--valid'
+                                    : 'golden-cross-value--invalid'
+                                }`}
+                              >
+                                {goldenCrossData.fibonacci ? (goldenCrossData.fibonacci.isValid ? '유효' : '무효') : '정보 없음'}
+                              </span>
+                            </div>
+                            <div className="golden-cross-cell">
+                              <span className="golden-cross-label">무효화 날짜</span>
+                              <span className="golden-cross-value golden-cross-value--neutral">
+                                {goldenCrossData.fibonacci?.invalidatedDate ?? '없음'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* 2행: 구조를 이룬 두 기준점(저점→고점). 저점/고점 사이 간격 정보는 API에
+                              아직 없으므로, 빈 칸을 채우지 않고 2칸만 둔다. */}
+                          <div className="golden-cross-row">
+                            <div className="golden-cross-cell">
+                              <span className="golden-cross-label">기준 저점</span>
+                              {goldenCrossData.referenceLow ? (
+                                <>
+                                  <span className="golden-cross-sub">{goldenCrossData.referenceLow.date}</span>
+                                  <span className="golden-cross-value golden-cross-value--low">
+                                    {formatPriceValue(goldenCrossData.referenceLow.low)}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="golden-cross-value golden-cross-value--neutral">정보 없음</span>
+                              )}
+                            </div>
+                            <div className="golden-cross-cell">
+                              <span className="golden-cross-label">확정 고점</span>
+                              {goldenCrossData.confirmedHigh ? (
+                                <>
+                                  <span className="golden-cross-sub">{goldenCrossData.confirmedHigh.date}</span>
+                                  <span className="golden-cross-value golden-cross-value--high">
+                                    {formatPriceValue(goldenCrossData.confirmedHigh.high)}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="golden-cross-value golden-cross-value--neutral">정보 없음</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 3행: 두 기준점에서 계산된 피보나치 레벨과, 각 레벨의 도달 상태를 같은
+                              카드 안에 함께 보여준다(0.5/0.618을 각각 구분). 항목이 2개뿐이라
+                              카드 하나가 차지하는 폭이 다른 행보다 넓어진다. */}
+                          <div className="golden-cross-row golden-cross-row--split">
+                            <div className="golden-cross-cell">
+                              <span className="golden-cross-label">피보나치 0.5</span>
+                              {goldenCrossData.fibonacci ? (
+                                <>
+                                  <span className="golden-cross-value golden-cross-value--fib">
+                                    {formatPriceValue(goldenCrossData.fibonacci.fibonacciLevels['0.5'])}
+                                  </span>
+                                  <span
+                                    className={`golden-cross-reach ${
+                                      goldenCrossData.fibonacci.levelStatus['0.5'].reached
+                                        ? 'golden-cross-reach--reached'
+                                        : 'golden-cross-reach--neutral'
+                                    }`}
+                                  >
+                                    {goldenCrossData.fibonacci.levelStatus['0.5'].reached
+                                      ? `0.5 도달 (${goldenCrossData.fibonacci.levelStatus['0.5'].firstReachedDate})`
+                                      : '0.5 미도달'}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="golden-cross-value golden-cross-value--neutral">정보 없음</span>
+                              )}
+                            </div>
+                            <div className="golden-cross-cell">
+                              <span className="golden-cross-label">피보나치 0.618</span>
+                              {goldenCrossData.fibonacci ? (
+                                <>
+                                  <span className="golden-cross-value golden-cross-value--fib">
+                                    {formatPriceValue(goldenCrossData.fibonacci.fibonacciLevels['0.618'])}
+                                  </span>
+                                  <span
+                                    className={`golden-cross-reach ${
+                                      goldenCrossData.fibonacci.levelStatus['0.618'].reached
+                                        ? 'golden-cross-reach--reached'
+                                        : 'golden-cross-reach--neutral'
+                                    }`}
+                                  >
+                                    {goldenCrossData.fibonacci.levelStatus['0.618'].reached
+                                      ? `0.618 도달 (${goldenCrossData.fibonacci.levelStatus['0.618'].firstReachedDate})`
+                                      : '0.618 미도달'}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="golden-cross-value golden-cross-value--neutral">정보 없음</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {goldenCrossData.fibonacci && (
+                            <p className="golden-cross-summary">
+                              {buildGoldenCrossSummary(goldenCrossData.fibonacci)}
+                            </p>
+                          )}
                         </>
                       )}
                     </div>
