@@ -1,6 +1,7 @@
 import { createServer } from 'node:http'
 import { TOSS_API_BASE, fetchWithRetry, getTossAccessToken } from './tossClient.js'
 import { getDailyMA200Series } from './ma200Analysis.js'
+import { getCrossoverAnalysis } from './crossoverAnalysis.js'
 
 const PORT = 3001
 
@@ -208,6 +209,24 @@ const server = createServer(async (req, res) => {
       console.error('MA200 분석 실패:', error.message)
       res.writeHead(502, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: 'MA200 데이터를 가져오지 못했습니다.' }))
+    }
+    return
+  }
+
+  // 골든크로스/기준저점/확정고점/Fibonacci 분석 전용. 새 계산 로직 없이 이미 검증된
+  // getCrossoverAnalysis(code)를 그대로 호출해서 반환한다(ma200 라우트와 동일한 패턴).
+  const goldenCrossMatch = url.pathname.match(/^\/api\/stock\/([A-Za-z0-9.-]+)\/golden-cross$/)
+
+  if (req.method === 'GET' && goldenCrossMatch) {
+    const code = goldenCrossMatch[1]
+    try {
+      const analysis = await getCrossoverAnalysis(code)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(analysis))
+    } catch (error) {
+      console.error('골든크로스 분석 실패:', error.message)
+      res.writeHead(502, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: '골든크로스 분석에 실패했습니다.' }))
     }
     return
   }
