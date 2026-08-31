@@ -3,7 +3,6 @@ import './App.css'
 
 const defaultStockCodes = ['005930', '000660', '035420']
 const WATCHLIST_STORAGE_KEY = 'stock-dashboard:watchlist'
-const AUTO_REFRESH_INTERVAL_MS = 30000
 // 이 시간(ms) 이상 카드를 누르고 있으면 "탭"이 아니라 "드래그 시작"으로 본다.
 const LONG_PRESS_MS = 400
 // 길게 누르기가 확정되기 전에 손가락이 이만큼(px) 넘게 움직이면 스크롤/짧은 탭으로 보고 드래그를 취소한다.
@@ -119,24 +118,11 @@ function formatPriceValue(value) {
   return `${Number(value).toLocaleString()}원`
 }
 
-function formatVolumeValue(value) {
-  if (value === null || value === undefined) return '정보 없음'
-  return `${Number(value).toLocaleString()}주`
-}
-
 function formatTimestamp(value) {
   if (!value) return null
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null
   return date.toLocaleString('ko-KR')
-}
-
-// 자동 갱신 상태 표시줄은 화면이 좁아도 한 줄에 들어가야 하므로 "HH:MM:SS"만 보여준다.
-function formatTimeOnly(value) {
-  if (!value) return null
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  return date.toLocaleTimeString('ko-KR', { hour12: false })
 }
 
 async function fetchStockData(code) {
@@ -181,17 +167,6 @@ function getStockInitials(name, englishName) {
   return source.charAt(0).toUpperCase()
 }
 
-// 관심종목 행의 미니차트용 2점(시가→현재가)만 만든다. 여러 날짜 시세는 상세보기를 열 때만
-// 받아오므로(차트 API를 관심종목 전체에 반복 호출하지 않기 위해), 여기서는 이미 받아둔
-// 당일 시가/현재가만으로 방향성 정도만 보여준다.
-function getMiniChartCloses(stock) {
-  if (stock.openPrice === null || stock.openPrice === undefined) return null
-  if (stock.rawPrice === null || stock.rawPrice === undefined) return null
-  const open = Number(stock.openPrice)
-  if (!Number.isFinite(open) || !Number.isFinite(stock.rawPrice)) return null
-  return [open, stock.rawPrice]
-}
-
 // 골든크로스/기준저점/확정고점/피보나치 분석 결과를 서버에서 그대로 받아온다.
 // 서버(getCrossoverAnalysis)가 이미 계산을 끝낸 값을 그대로 전달할 뿐, 여기서는
 // 아무 계산도 하지 않는다.
@@ -227,6 +202,31 @@ function buildGoldenCrossSummary(fibonacci) {
   }
 
   return `${validityText} ${reachText}`
+}
+
+// X 대신 휴지통 모양 아이콘으로 삭제 버튼임을 바로 알아볼 수 있게 한다. 새 아이콘 라이브러리를
+// 추가하지 않고, 이 프로젝트가 이미 쓰는 방식(순수 SVG)을 그대로 따른다.
+function TrashIcon() {
+  return (
+    <svg
+      className="trash-icon"
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  )
 }
 
 // 선택된 기간의 종가로 아주 단순한 선 차트를 그린다. 새 라이브러리 없이 순수 SVG로 그린다.
@@ -318,7 +318,6 @@ function App() {
   const [isAdding, setIsAdding] = useState(false)
   const [addError, setAddError] = useState('')
   const [selectedStock, setSelectedStock] = useState(null)
-  const [lastUpdatedAt, setLastUpdatedAt] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const stocksRef = useRef(stocks)
@@ -326,14 +325,13 @@ function App() {
     stocksRef.current = stocks
   }, [stocks])
 
-  // isRefreshingRef가 실제 "잠금"이다(자동 갱신과 수동 버튼이 함께 확인해서 중복 요청을 막는다).
+  // isRefreshingRef가 실제 "잠금"이다(버튼을 연달아 눌러도 중복 요청이 나가지 않게 막는다).
   // isRefreshing state는 버튼 표시("갱신 중...")를 화면에 그려주기 위한 용도로만 쓴다.
   const isRefreshingRef = useRef(false)
 
-  // 관심종목 가격을 다시 받아온다. 자동 갱신(30초 주기)과 "지금 새로고침" 버튼이
-  // 이 함수 하나를 공유해서 쓴다. 토스 API 429(요청 과다)를 피하기 위해
-  // (1) 이미 갱신 중이면 새 요청을 건너뛰고, (2) 여러 종목을 한번에 몰아서 요청하지 않고
-  // 하나씩 순서대로 요청한다.
+  // 관심종목 가격을 다시 받아온다. "지금 새로고침" 버튼을 눌렀을 때만 호출된다.
+  // 토스 API 429(요청 과다)를 피하기 위해 (1) 이미 갱신 중이면 새 요청을 건너뛰고,
+  // (2) 여러 종목을 한번에 몰아서 요청하지 않고 하나씩 순서대로 요청한다.
   const refreshStocks = useCallback(async () => {
     if (isRefreshingRef.current) return
 
@@ -352,7 +350,6 @@ function App() {
         // 이 종목만 갱신을 건너뛰고 기존 값을 그대로 둔다. 다른 종목 갱신은 계속 진행한다.
       }
     }
-    setLastUpdatedAt(new Date())
     isRefreshingRef.current = false
     setIsRefreshing(false)
   }, [])
@@ -365,7 +362,7 @@ function App() {
   const chartCacheRef = useRef(new Map())
 
   // 종목을 선택해 우측 상세 패널을 채울 때, 그리고 기간 버튼을 바꿀 때만 차트를 받아온다.
-  // 관심종목 목록의 30초 자동 갱신(refreshStocks)이나 수동 새로고침과는 완전히 분리돼 있어서,
+  // 관심종목 목록의 수동 새로고침(refreshStocks)과는 완전히 분리돼 있어서,
   // 아직 아무 종목도 선택하지 않았을 때는 이 요청이 전혀 발생하지 않는다.
   useEffect(() => {
     if (!selectedStock || selectedStock.status === 'error') {
@@ -463,16 +460,6 @@ function App() {
     loadInitialStocks()
   }, [])
 
-  // 30초마다 refreshStocks를 호출한다. 화면이 보이지 않을 때는 건너뛴다
-  // (어차피 refreshStocks 안에서도 이미 갱신 중이면 건너뛰므로, 버튼과 겹쳐도 중복 요청은 안 생긴다).
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      if (document.hidden) return
-      refreshStocks()
-    }, AUTO_REFRESH_INTERVAL_MS)
-
-    return () => clearInterval(intervalId)
-  }, [refreshStocks])
 
   useEffect(() => {
     const keyword = addQuery.trim()
@@ -750,12 +737,6 @@ function App() {
           >
             {isRefreshing ? '갱신 중...' : '지금 새로고침'}
           </button>
-          <span className="auto-refresh-status">
-            <span>30초마다 자동 갱신</span>
-            <span className="auto-refresh-time">
-              마지막 갱신 {formatTimeOnly(lastUpdatedAt) ?? '대기 중'}
-            </span>
-          </span>
         </div>
 
         {isLoadingInitial ? (
@@ -800,16 +781,15 @@ function App() {
                       type="button"
                       className="delete-button watchlist-delete"
                       onClick={(e) => handleDelete(stock.id, e)}
-                      aria-label="삭제"
+                      aria-label={`${stock.name} 관심종목 삭제`}
                     >
-                      ×
+                      <TrashIcon />
                     </button>
                   </div>
                 )
               }
 
               const { rate, changeClass } = getChangeDisplay(stock.changeRate)
-              const miniChartCloses = getMiniChartCloses(stock)
 
               return (
                 <div
@@ -836,18 +816,13 @@ function App() {
                   <p className={`stock-change watchlist-change ${changeClass}`}>
                     {rate === null ? '–' : stock.changeRate}
                   </p>
-                  <div className="watchlist-mini-chart">
-                    {miniChartCloses && (
-                      <StockChart closes={miniChartCloses} periodLabel="당일" />
-                    )}
-                  </div>
                   <button
                     type="button"
                     className="delete-button watchlist-delete"
                     onClick={(e) => handleDelete(stock.id, e)}
-                    aria-label="삭제"
+                    aria-label={`${stock.name} 관심종목 삭제`}
                   >
-                    ×
+                    <TrashIcon />
                   </button>
                 </div>
               )
@@ -882,25 +857,6 @@ function App() {
                         {rate === null ? '등락률 정보 없음' : `${arrow} ${selectedStock.changeRate}`}
                       </span>
                     </div>
-
-                    <dl className="stock-detail-grid">
-                      <div>
-                        <dt>시가</dt>
-                        <dd>{formatPriceValue(selectedStock.openPrice)}</dd>
-                      </div>
-                      <div>
-                        <dt>고가</dt>
-                        <dd>{formatPriceValue(selectedStock.highPrice)}</dd>
-                      </div>
-                      <div>
-                        <dt>저가</dt>
-                        <dd>{formatPriceValue(selectedStock.lowPrice)}</dd>
-                      </div>
-                      <div>
-                        <dt>거래량</dt>
-                        <dd>{formatVolumeValue(selectedStock.volume)}</dd>
-                      </div>
-                    </dl>
 
                     {formatTimestamp(selectedStock.timestamp) && (
                       <p className="stock-detail-timestamp">

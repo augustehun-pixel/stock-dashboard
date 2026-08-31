@@ -164,6 +164,7 @@
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  margin-left: auto;
 }
 
 .manual-refresh-button:hover {
@@ -173,22 +174,6 @@
 .manual-refresh-button:disabled {
   opacity: 0.6;
   cursor: default;
-}
-
-.auto-refresh-status {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin-left: auto;
-  text-align: right;
-}
-
-.auto-refresh-time {
-  font-size: 11px;
-  color: var(--text-tertiary);
 }
 
 .status-message {
@@ -307,7 +292,7 @@
   /* 현재가 열(82px)은 "1,658,000원"처럼 7자리 가격까지 겹치지 않게 여유를 두고,
      등락률 열(52px)은 그 옆에 완전히 분리된 자기 칸을 갖는다(둘 다 고정 폭 + 오른쪽 정렬이라
      어떤 종목이든 같은 x축에 정렬된다). */
-  grid-template-columns: 14px 16px 26px minmax(0, 1fr) 82px 52px 40px 22px;
+  grid-template-columns: 14px 16px 26px minmax(0, 1fr) 82px 52px 22px;
   align-items: center;
   column-gap: 6px;
   cursor: pointer;
@@ -393,9 +378,11 @@
   color: var(--text-tertiary);
 }
 
+/* 미니차트를 없앤 자리만큼 현재가 쪽에 오른쪽 여백을 더 줘서 등락률과 붙어 보이지 않게 한다. */
 .watchlist-price {
   grid-column: 5;
   text-align: right;
+  padding-right: 10px;
 }
 
 .watchlist-change {
@@ -403,20 +390,9 @@
   text-align: right;
 }
 
-.watchlist-mini-chart {
-  grid-column: 7;
-  width: 40px;
-  height: 22px;
-}
-
-/* StockChart는 기본 64px 높이로 그려지므로(.stock-chart), 미니차트 안에서만 더 작게 줄인다. */
-.watchlist-mini-chart .stock-chart {
-  height: 22px;
-}
-
-/* 현재가/등락률/미니차트 3개 열을 하나로 합쳐 쓰는 오류 행 전용 칸. */
+/* 현재가/등락률 2개 열을 하나로 합쳐 쓰는 오류 행 전용 칸. */
 .watchlist-error-cell {
-  grid-column: 5 / 8;
+  grid-column: 5 / 7;
   font-size: 12px;
   color: var(--text-secondary);
   overflow: hidden;
@@ -473,25 +449,31 @@
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.delete-button:hover {
+.delete-button:hover,
+.delete-button:focus-visible {
   background: rgba(255, 107, 107, 0.12);
   border-color: rgba(255, 107, 107, 0.4);
   color: var(--gc-invalid);
 }
 
-/* compact row 안에서만 삭제 버튼을 작은 아이콘 버튼(×)으로 줄인다. */
+/* compact row 안에서만 삭제 버튼을 작은 휴지통 아이콘 버튼으로 줄인다. */
 .watchlist-delete {
-  grid-column: 8;
+  grid-column: 7;
   width: 22px;
   height: 22px;
   min-width: 0;
   min-height: 0;
   padding: 0;
-  font-size: 14px;
-  line-height: 1;
   justify-self: end;
+}
+
+.trash-icon {
+  pointer-events: none;
 }
 
 /* 오른쪽 상세 패널. 예전에는 화면 위에 뜨는 모달 카드였지만, 이제는 대시보드 오른쪽
@@ -548,33 +530,6 @@
 .stock-detail-price {
   font-size: 26px;
   font-weight: 700;
-  color: var(--text-primary);
-}
-
-.stock-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin: 0 0 16px;
-}
-
-.stock-detail-grid div {
-  background: var(--section-bg);
-  border: 1px solid var(--section-border);
-  border-radius: 8px;
-  padding: 10px 12px;
-}
-
-.stock-detail-grid dt {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 4px;
-}
-
-.stock-detail-grid dd {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -650,10 +605,12 @@
 }
 
 /* viewBox 좌표계로 그려서 패널 폭에 맞게 자동으로 늘어나거나 줄어든다(가로 스크롤 없음). */
+/* 시가/고가/저가/거래량 카드를 없애면서 생긴 공간만큼 키운 높이(기존 64px).
+   골든크로스 분석이 아래로 지나치게 밀리지 않는 선에서 가장 중요한 가격 흐름을 키워 보여준다. */
 .stock-chart {
   display: block;
   width: 100%;
-  height: 64px;
+  height: 140px;
 }
 
 .stock-chart-line {
