@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import CandleChart from './CandleChart'
+import { MA_COLORS } from './chartColors'
 import './App.css'
 
 const defaultStockCodes = ['005930', '000660', '035420']
@@ -8,12 +10,25 @@ const LONG_PRESS_MS = 400
 // 길게 누르기가 확정되기 전에 손가락이 이만큼(px) 넘게 움직이면 스크롤/짧은 탭으로 보고 드래그를 취소한다.
 const DRAG_MOVE_CANCEL_PX = 10
 
-// 상세보기 차트의 기간 선택지. value는 서버 API(/api/stock/:code/chart?period=...)로 그대로 전달된다.
-const CHART_PERIODS = [
-  { value: '1M', label: '1개월' },
-  { value: '3M', label: '3개월' },
-  { value: '6M', label: '6개월' },
+// 상단 "가격 추이" 미니 차트는 기간 선택 없이 항상 최근 1개월만 보여준다(compact 유지 목적).
+const PRICE_TREND_PERIOD = '1M'
+
+// 캔들 차트의 시간봉 선택지. 순서 고정. value는 서버 API(/api/stock/:code/candles?interval=...)로
+// 그대로 전달된다. 토스증권 캔들 API는 실제로 1분봉/일봉만 지원해서(2026-09-01 확인,
+// 400 응답의 allowedValues: ["1m","1d"]), 6시간/12시간은 정규장(09:00~15:30, 6.5시간)
+// 안에서 의미 있게 나눌 수 있는 데이터가 없다 - 가짜 데이터를 만드는 대신 버튼은 두되
+// 비활성화한다(supported: false).
+const CHART_TIMEFRAMES = [
+  { value: '30m', label: '30분', supported: true },
+  { value: '1h', label: '1시간', supported: true },
+  { value: '4h', label: '4시간', supported: true },
+  { value: '6h', label: '6시간', supported: false },
+  { value: '12h', label: '12시간', supported: false },
+  { value: '1d', label: '1일', supported: true },
+  { value: '1w', label: '1주', supported: true },
 ]
+const DEFAULT_CHART_TIMEFRAME = '1d'
+const MA_PERIODS = [5, 20, 60, 120]
 
 // 상단 필터 바의 UI 골격만 미리 만들어둔다. "전체"만 선택 가능하고 나머지는 비활성 상태로만
 // 보여준다 - 실제 정렬/필터 로직과 오더블럭/FVG/채널/추세선 같은 향후 분석 필터는 여기 배열에
@@ -84,33 +99,6 @@ function calculatePeriodReturn(closes) {
 
   const rate = ((last - first) / first) * 100
   return Number.isFinite(rate) ? rate : null
-}
-
-// chartCloses(선택된 기간의 종가 배열)만으로 기간 최저/최고가와, 그 범위 안에서
-// 현재가(가장 최근 종가)가 몇 %쯤 위치하는지 계산한다. 별도 API 호출은 하지 않는다.
-// 최고가==최저가(가격이 전혀 안 움직인 경우)처럼 나눗셈이 불가능하거나 결과가
-// NaN/Infinity가 되는 경우에는 위치값을 null로 돌려줘서 화면에 보여주지 않게 한다.
-function calculatePriceRange(closes) {
-  if (!Array.isArray(closes) || closes.length < 2) return null
-
-  const numericCloses = closes.map(Number)
-  if (numericCloses.some((value) => !Number.isFinite(value))) return null
-
-  const low = Math.min(...numericCloses)
-  const high = Math.max(...numericCloses)
-  const current = numericCloses[numericCloses.length - 1]
-
-  const span = high - low
-  let positionPercent = null
-  if (span > 0) {
-    const raw = ((current - low) / span) * 100
-    if (Number.isFinite(raw)) {
-      // 계산상 0~100을 살짝 벗어날 수 있는 경우까지 대비해 범위를 안전하게 고정한다.
-      positionPercent = Math.min(100, Math.max(0, raw))
-    }
-  }
-
-  return { low, high, positionPercent }
 }
 
 function formatPriceValue(value) {
@@ -269,46 +257,6 @@ function StockChart({ closes, periodLabel }) {
   )
 }
 
-// 선택 기간의 최저/최고가와, 그 범위 안에서 현재가의 위치를 막대로 보여준다.
-// 상승/하락 판단이 아니라 "범위 안 어디쯤인가"를 보여주는 것이므로 positive/negative
-// 색상 대신 중립적인 색(텍스트/트랙 색)만 사용한다.
-function StockPriceRangeIndicator({ closes }) {
-  const range = calculatePriceRange(closes)
-  if (!range) return null
-
-  const { low, high, positionPercent } = range
-
-  return (
-    <div className="stock-price-range">
-      <div className="stock-price-range-labels">
-        <span>
-          기간 최저 <strong>{formatPriceValue(low)}</strong>
-        </span>
-        <span>
-          기간 최고 <strong>{formatPriceValue(high)}</strong>
-        </span>
-      </div>
-      {positionPercent !== null && (
-        <>
-          <div
-            className="stock-price-range-bar"
-            role="img"
-            aria-label={`기간 범위 중 현재 위치 ${Math.round(positionPercent)}%`}
-          >
-            <div className="stock-price-range-track">
-              <div
-                className="stock-price-range-dot"
-                style={{ left: `${positionPercent}%` }}
-              />
-            </div>
-          </div>
-          <p className="stock-price-range-position">현재 위치 {Math.round(positionPercent)}%</p>
-        </>
-      )}
-    </div>
-  )
-}
-
 function App() {
   const [stocks, setStocks] = useState([])
   const [isLoadingInitial, setIsLoadingInitial] = useState(true)
@@ -356,13 +304,12 @@ function App() {
 
   const [chartStatus, setChartStatus] = useState('idle') // idle | loading | success | error
   const [chartCloses, setChartCloses] = useState(null)
-  const [chartPeriod, setChartPeriod] = useState('1M')
-  // 같은 "종목 + 기간" 조합을 다시 열었을 때 차트를 또 요청하지 않도록 두는 아주 단순한
-  // 캐시(세션 동안만 메모리에 유지, localStorage에는 저장하지 않음). 키 예: "035420-1M".
+  // 같은 종목의 1개월 차트를 다시 열었을 때 또 요청하지 않도록 두는 아주 단순한 캐시
+  // (세션 동안만 메모리에 유지, localStorage에는 저장하지 않음). 키 예: "035420".
   const chartCacheRef = useRef(new Map())
 
-  // 종목을 선택해 우측 상세 패널을 채울 때, 그리고 기간 버튼을 바꿀 때만 차트를 받아온다.
-  // 관심종목 목록의 수동 새로고침(refreshStocks)과는 완전히 분리돼 있어서,
+  // 종목을 선택해 우측 상세 패널을 채울 때만 "가격 추이" 미니 차트를 받아온다(항상 1개월
+  // 고정). 관심종목 목록의 수동 새로고침(refreshStocks)과는 완전히 분리돼 있어서,
   // 아직 아무 종목도 선택하지 않았을 때는 이 요청이 전혀 발생하지 않는다.
   useEffect(() => {
     if (!selectedStock || selectedStock.status === 'error') {
@@ -372,8 +319,7 @@ function App() {
     }
 
     const code = selectedStock.code
-    const cacheKey = `${code}-${chartPeriod}`
-    const cached = chartCacheRef.current.get(cacheKey)
+    const cached = chartCacheRef.current.get(code)
     if (cached) {
       setChartCloses(cached)
       setChartStatus('success')
@@ -384,14 +330,14 @@ function App() {
     setChartStatus('loading')
     setChartCloses(null)
 
-    fetch(`/api/stock/${code}/chart?period=${chartPeriod}`)
+    fetch(`/api/stock/${code}/chart?period=${PRICE_TREND_PERIOD}`)
       .then((response) => {
         if (!response.ok) throw new Error('차트 조회 실패')
         return response.json()
       })
       .then((data) => {
         if (cancelled) return
-        chartCacheRef.current.set(cacheKey, data.closes)
+        chartCacheRef.current.set(code, data.closes)
         setChartCloses(data.closes)
         setChartStatus('success')
       })
@@ -402,7 +348,63 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [selectedStock, chartPeriod])
+  }, [selectedStock])
+
+  const [candleTimeframe, setCandleTimeframe] = useState(DEFAULT_CHART_TIMEFRAME)
+  const [candleStatus, setCandleStatus] = useState('idle') // idle | loading | success | error
+  const [candleData, setCandleData] = useState(null) // { candles, ma }
+  // "종목 + 시간봉" 조합별 캐시(세션 동안만). 키 예: "035420-4h".
+  const candleCacheRef = useRef(new Map())
+
+  // 캔들 차트(30분/1시간/4시간/1일/1주)는 가격 추이 미니 차트와 완전히 분리된 별도 요청이다.
+  // 골든크로스 분석(아래)과도 분리돼 있다 - 골든크로스는 항상 일봉 기준으로 별도 계산되고,
+  // 여기서 시간봉을 바꿔도 골든크로스 요청/판정에는 전혀 영향을 주지 않는다.
+  useEffect(() => {
+    if (!selectedStock || selectedStock.status === 'error') {
+      setCandleStatus('idle')
+      setCandleData(null)
+      return
+    }
+
+    const code = selectedStock.code
+    const requestedTimeframe = candleTimeframe
+    const cacheKey = `${code}-${requestedTimeframe}`
+    const cached = candleCacheRef.current.get(cacheKey)
+    if (cached) {
+      setCandleData(cached)
+      setCandleStatus('success')
+      return
+    }
+
+    let cancelled = false
+    setCandleStatus('loading')
+    setCandleData(null)
+
+    fetch(`/api/stock/${code}/candles?interval=${requestedTimeframe}`)
+      .then((response) => {
+        if (!response.ok) throw new Error('캔들 차트 조회 실패')
+        return response.json()
+      })
+      .then((data) => {
+        if (cancelled) return
+        // candles/ma와 timeframe을 하나의 객체로 함께 저장해서, CandleChart가 항상
+        // "같은 응답에서 나온" 서로 맞는 조합만 받도록 한다(버튼의 candleTimeframe을
+        // 바로 넘기면, 새 시간봉을 고른 직후 아직 이전 응답이 화면에 남아있는 순간에
+        // "새 timeframe + 이전 candles"처럼 서로 안 맞는 조합이 잠깐 넘어갈 수 있었음 -
+        // lightweight-charts가 시간 축 정렬이 깨졌다고 에러를 던지는 원인이었다).
+        const withTimeframe = { ...data, timeframe: requestedTimeframe }
+        candleCacheRef.current.set(cacheKey, withTimeframe)
+        setCandleData(withTimeframe)
+        setCandleStatus('success')
+      })
+      .catch(() => {
+        if (!cancelled) setCandleStatus('error')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedStock, candleTimeframe])
 
   const [goldenCrossStatus, setGoldenCrossStatus] = useState('idle') // idle | loading | success | error
   const [goldenCrossData, setGoldenCrossData] = useState(null)
@@ -625,8 +627,8 @@ function App() {
 
   function handleSelectStock(stock) {
     setSelectedStock(stock)
-    // 우측 패널에 새 종목을 선택할 때마다 차트 기간은 항상 1개월부터 시작한다.
-    setChartPeriod('1M')
+    // 우측 패널에 새 종목을 선택할 때마다 캔들 차트 시간봉은 항상 1일부터 시작한다.
+    setCandleTimeframe(DEFAULT_CHART_TIMEFRAME)
   }
 
   function handleCardKeyDown(e, stock) {
@@ -864,10 +866,10 @@ function App() {
                       </p>
                     )}
 
-                    <div className="stock-chart-section">
+                    <div className="stock-chart-section stock-chart-section--compact">
                       <div className="stock-chart-header">
                         <div className="stock-chart-title-group">
-                          <p className="stock-chart-title">가격 추이</p>
+                          <p className="stock-chart-title">가격 추이 (1개월)</p>
                           {chartStatus === 'success' &&
                             (() => {
                               const periodReturn = calculatePeriodReturn(chartCloses)
@@ -880,21 +882,6 @@ function App() {
                               )
                             })()}
                         </div>
-                        <div className="stock-chart-period-buttons" role="group" aria-label="차트 기간 선택">
-                          {CHART_PERIODS.map((period) => (
-                            <button
-                              key={period.value}
-                              type="button"
-                              className={`stock-chart-period-button${
-                                chartPeriod === period.value ? ' active' : ''
-                              }`}
-                              aria-pressed={chartPeriod === period.value}
-                              onClick={() => setChartPeriod(period.value)}
-                            >
-                              {period.label}
-                            </button>
-                          ))}
-                        </div>
                       </div>
                       {chartStatus === 'loading' && (
                         <p className="stock-chart-status">차트 불러오는 중...</p>
@@ -904,18 +891,66 @@ function App() {
                       )}
                       {chartStatus === 'success' && chartCloses && chartCloses.length >= 2 && (
                         <>
-                          <StockChart
-                            closes={chartCloses}
-                            periodLabel={
-                              CHART_PERIODS.find((period) => period.value === chartPeriod)?.label
-                            }
-                          />
+                          <StockChart closes={chartCloses} periodLabel="1개월" />
                           <div className="stock-chart-range">
                             <span>{formatPriceValue(chartCloses[0])}</span>
                             <span>{formatPriceValue(chartCloses[chartCloses.length - 1])}</span>
                           </div>
-                          <StockPriceRangeIndicator closes={chartCloses} />
                         </>
+                      )}
+                    </div>
+
+                    <div className="candle-chart-section">
+                      <div className="stock-chart-header">
+                        <p className="stock-chart-title">캔들 차트</p>
+                        <div
+                          className="stock-chart-period-buttons"
+                          role="group"
+                          aria-label="차트 시간봉 선택"
+                        >
+                          {CHART_TIMEFRAMES.map((timeframe) => (
+                            <button
+                              key={timeframe.value}
+                              type="button"
+                              className={`stock-chart-period-button${
+                                candleTimeframe === timeframe.value ? ' active' : ''
+                              }${timeframe.supported ? '' : ' unsupported'}`}
+                              aria-pressed={candleTimeframe === timeframe.value}
+                              disabled={!timeframe.supported}
+                              title={
+                                timeframe.supported
+                                  ? undefined
+                                  : '토스증권 API 미지원 시간봉입니다 (정규장 6.5시간 특성상 데이터를 만들 수 없어요)'
+                              }
+                              onClick={() => setCandleTimeframe(timeframe.value)}
+                            >
+                              {timeframe.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="ma-legend">
+                        <span className="ma-legend-label">이동평균선</span>
+                        {MA_PERIODS.map((period) => (
+                          <span key={period} className="ma-legend-item" style={{ color: MA_COLORS[period] }}>
+                            {period}
+                          </span>
+                        ))}
+                      </div>
+
+                      {candleStatus === 'loading' && (
+                        <p className="stock-chart-status">캔들 차트 불러오는 중...</p>
+                      )}
+                      {candleStatus === 'error' && (
+                        <p className="stock-chart-status">캔들 차트를 불러오지 못했습니다</p>
+                      )}
+                      {candleStatus === 'success' && candleData && candleData.candles.length > 0 && (
+                        <CandleChart
+                          candles={candleData.candles}
+                          ma={candleData.ma}
+                          timeframe={candleData.timeframe}
+                        />
                       )}
                     </div>
 

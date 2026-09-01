@@ -2,6 +2,8 @@ import { createServer } from 'node:http'
 import { TOSS_API_BASE, fetchWithRetry, getTossAccessToken } from './tossClient.js'
 import { getDailyMA200Series } from './ma200Analysis.js'
 import { getCrossoverAnalysis } from './crossoverAnalysis.js'
+import { getChartCandles, isSupportedChartTimeframe } from './chartCandles.js'
+import { calculateMovingAverages } from './movingAverage.js'
 
 const PORT = 3001
 
@@ -227,6 +229,39 @@ const server = createServer(async (req, res) => {
       console.error('골든크로스 분석 실패:', error.message)
       res.writeHead(502, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: '골든크로스 분석에 실패했습니다.' }))
+    }
+    return
+  }
+
+  // 상세보기 "캔들 차트"(30분/1시간/4시간/1일/1주) 전용. 골든크로스 판정과는 완전히
+  // 분리된 chartCandles.js를 통해 OHLCV + 이동평균(5/20/60/120)을 함께 내려준다.
+  const candlesMatch = url.pathname.match(/^\/api\/stock\/([A-Za-z0-9.-]+)\/candles$/)
+
+  if (req.method === 'GET' && candlesMatch) {
+    const code = candlesMatch[1]
+    const interval = url.searchParams.get('interval') ?? ''
+
+    if (!isSupportedChartTimeframe(interval)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: `지원하지 않는 시간봉입니다: ${interval}` }))
+      return
+    }
+
+    try {
+      const candles = await getChartCandles(code, interval)
+      const closes = candles.map((candle) => candle.close)
+      const ma = {
+        5: calculateMovingAverages(closes, 5),
+        20: calculateMovingAverages(closes, 20),
+        60: calculateMovingAverages(closes, 60),
+        120: calculateMovingAverages(closes, 120),
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ candles, ma }))
+    } catch (error) {
+      console.error('캔들 차트 데이터 요청 실패:', error.message)
+      res.writeHead(502, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: '캔들 차트 데이터를 가져오지 못했습니다.' }))
     }
     return
   }

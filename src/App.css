@@ -604,13 +604,18 @@
   margin: 0;
 }
 
+/* 캔들 차트가 메인 분석 차트가 되면서, "가격 추이" 미니 차트는 보조 역할로 줄어든다.
+   시간봉 선택 버튼도 없앤 만큼(항상 1개월 고정) 세로 공간을 압축해서 compact하게 만든다. */
+.stock-chart-section--compact {
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
 /* viewBox 좌표계로 그려서 패널 폭에 맞게 자동으로 늘어나거나 줄어든다(가로 스크롤 없음). */
-/* 시가/고가/저가/거래량 카드를 없애면서 생긴 공간만큼 키운 높이(기존 64px).
-   골든크로스 분석이 아래로 지나치게 밀리지 않는 선에서 가장 중요한 가격 흐름을 키워 보여준다. */
 .stock-chart {
   display: block;
   width: 100%;
-  height: 140px;
+  height: 56px;
 }
 
 .stock-chart-line {
@@ -633,61 +638,54 @@
   color: var(--text-secondary);
 }
 
-/* 기간 최저/최고 + 현재 위치. 상승/하락 판단이 아니라 범위 안 위치를 보여주는
-   목적이라, positive/negative(빨강/파랑) 대신 라이트/다크모드에서 이미 알아서
-   바뀌는 중립 색상 변수만 사용한다. */
-.stock-price-range {
-  margin-top: 14px;
+/* 메인 분석 차트(캔들스틱 + 거래량 + 이동평균선) 영역. 오른쪽 상세 패널 폭을 최대한
+   쓰되, iPad Safari에서 세로로 너무 길어지지 않도록 캔버스 높이를 고정한다. */
+.candle-chart-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--input-border);
 }
 
-.stock-price-range-labels {
+.stock-chart-period-button:disabled,
+.stock-chart-period-button.unsupported {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.stock-chart-period-button:disabled:active {
+  transform: none;
+}
+
+/* "이동평균선 5 20 60 120" 범례. 숫자 색은 CandleChart.jsx의 MA_COLORS와 반드시 맞춘다. */
+.ma-legend {
   display: flex;
-  justify-content: space-between;
+  align-items: baseline;
   flex-wrap: wrap;
-  gap: 6px 12px;
-  font-size: 13px;
+  gap: 10px;
+  margin: 10px 0 8px;
+  font-size: 12px;
+}
+
+.ma-legend-label {
   color: var(--text-secondary);
 }
 
-.stock-price-range-labels strong {
-  color: var(--text-primary);
+.ma-legend-item {
   font-weight: 700;
 }
 
-/* 손가락으로 보기 편하게 막대 자체를 24px 높이로 잡는다(실제 눌리는 버튼은 아님). */
-.stock-price-range-bar {
-  display: flex;
-  align-items: center;
-  height: 24px;
-  margin-top: 6px;
-}
-
-.stock-price-range-track {
-  position: relative;
+/* lightweight-charts가 캔버스를 그려 넣는 컨테이너. autoSize:true가 폭/높이를 이
+   요소에 맞춰 채우므로, 실제 크기는 여기 고정 height로만 조절한다. iPad 가로/세로
+   모두에서 스크롤 없이 한눈에 들어오는 높이로 잡았다. */
+.candle-chart-canvas {
   width: 100%;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--input-border);
+  height: 320px;
 }
 
-.stock-price-range-dot {
-  position: absolute;
-  top: 50%;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--text-primary);
-  border: 2px solid var(--card-bg);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  transform: translate(-50%, -50%);
-}
-
-.stock-price-range-position {
-  margin: 6px 0 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-align: center;
+@media (max-width: 600px) {
+  .candle-chart-canvas {
+    height: 260px;
+  }
 }
 
 /* 골든크로스 요약 패널. 라이트/다크 색상은 모두 .app-shell 변수(--input-bg, --primary-bg,
