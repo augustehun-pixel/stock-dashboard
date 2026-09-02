@@ -173,6 +173,61 @@ export function isSupportedChartTimeframe(timeframe) {
   return SUPPORTED_TIMEFRAMES.has(timeframe)
 }
 
+// 차트 표시용 4시간봉 PM(오후) 캔들 마감 보정 --------------------------------------
+// fourHourCandles.js의 PM 세션은 13:00~15:30(분단위 930)까지만 담는데, 실측 결과
+// (005930, 여러 거래일 확인) 정규장 마감 동시호가 체결은 항상 "15:31" 라벨의 1분봉으로
+// 찍히고(체결 시각이 정확히 15:30:00이라 다음 분 경계로 넘어가는 것으로 보임 - 09:00 개장
+// 동시호가가 "09:01" 라벨로 찍혀 자연스럽게 포함되는 것과 대칭되는 현상), 그 다음
+// (15:32~)은 시간외 거래(15:40 이후)가 시작되기 전까지 거래량 0으로 비어 있다.
+// 이 라벨링 특성은 특정 하루만이 아니라 모든 거래일에 동일하게 적용되므로(실측으로 여러
+// 날짜에서 확인), "가장 최근 캔들만" 보정하면 다른 과거 PM 캔들과 종가 기준이 달라져
+// 오히려 일관성이 깨진다 - 그래서 PM 캔들 전체에 같은 규칙을 적용한다.
+// golden-cross/Fibonacci가 쓰는 aggregateToFourHourCandles(fourHourCandles.js)의 세션
+// 경계는 건드리지 않고(공유 로직 변경 금지), 차트에 보여줄 PM 캔들만 이 마감 동시호가
+// 체결가로 보정한다.
+const SHARED_PM_SESSION_END_MINUTE = 15 * 60 + 30 // 15:30 (fourHourCandles.js와 동일)
+const CLOSING_AUCTION_MINUTE = 15 * 60 + 31 // 15:31 (실측 확인)
+
+// date(YYYY-MM-DD) -> 그날 마감 동시호가 체결 1분봉. minuteCandles 전체를 한 번만 훑어서
+// (930, 931] 구간에 걸리는 캔들만 날짜별로 모아둔다(4시간봉 개수만큼 매번 훑지 않기 위함).
+function buildClosingAuctionCandlesByDate(minuteCandles) {
+  const byDate = new Map()
+  for (const candle of minuteCandles) {
+    const hour = Number(candle.timestamp.slice(11, 13))
+    const minute = Number(candle.timestamp.slice(14, 16))
+    const minuteOfDay = hour * 60 + minute
+    if (minuteOfDay <= SHARED_PM_SESSION_END_MINUTE || minuteOfDay > CLOSING_AUCTION_MINUTE) continue
+    byDate.set(candle.timestamp.slice(0, 10), candle)
+  }
+  return byDate
+}
+
+function applyRegularSessionCloseAuction(fourHourCandles, minuteCandles) {
+  if (fourHourCandles.length === 0) return fourHourCandles
+
+  const auctionByDate = buildClosingAuctionCandlesByDate(minuteCandles)
+  if (auctionByDate.size === 0) return fourHourCandles
+
+  return fourHourCandles.map((candle) => {
+    if (candle.session !== 'PM') return candle // 보정 대상은 PM(장마감) 캔들뿐
+
+    const auction = auctionByDate.get(candle.date)
+    // 마감 동시호가 체결 데이터가 아직 없으면(장중이거나 데이터 지연) 그대로 둔다 - 가짜 값 금지.
+    if (!auction) return candle
+
+    const hasVolume =
+      candle.volume !== null && auction.volume !== null && Number.isFinite(auction.volume)
+
+    return {
+      ...candle,
+      close: auction.close,
+      high: Math.max(candle.high, auction.high),
+      low: Math.min(candle.low, auction.low),
+      volume: hasVolume ? candle.volume + auction.volume : candle.volume,
+    }
+  })
+}
+
 // timeframe: '30m' | '1h' | '4h' | '1d' | '1w'
 // 반환: [{ date, timestamp, open, high, low, close, volume }, ...] (오래된 -> 최신 순)
 export async function getChartCandles(code, timeframe) {
@@ -193,10 +248,12 @@ export async function getChartCandles(code, timeframe) {
 
   if (timeframe === '4h') {
     const candles = await getFourHourCandles(code)
+    const minuteCandles = await fetchMinuteCandles(accessToken, code, minMinuteCandlesForTradingDays(3))
+    const corrected = applyRegularSessionCloseAuction(candles, minuteCandles)
     // getFourHourCandles(골든크로스와 공유하는 원본)는 { date, session, ... }만 주고
     // timestamp가 없다. 원본을 바꾸지 않고, 다른 시간봉과 형태를 맞추기 위해
     // date + session(AM=09:00 시작, PM=13:00 시작)만으로 시각을 계산해 덧붙인다.
-    return candles.map((candle) => ({
+    return corrected.map((candle) => ({
       date: candle.date,
       timestamp: `${candle.date}T${candle.session === 'AM' ? '09:00:00' : '13:00:00'}.000+09:00`,
       open: candle.open,
