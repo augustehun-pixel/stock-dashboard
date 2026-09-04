@@ -4,6 +4,8 @@ import { getDailyMA200Series } from './ma200Analysis.js'
 import { getCrossoverAnalysis } from './crossoverAnalysis.js'
 import { getChartCandles, isSupportedChartTimeframe } from './chartCandles.js'
 import { calculateMovingAverages } from './movingAverage.js'
+import { detectOrderBlocks } from './orderBlock.js'
+import { resolveOrderBlockLifecycle } from './orderBlockLifecycle.js'
 
 const PORT = 3001
 
@@ -262,6 +264,51 @@ const server = createServer(async (req, res) => {
       console.error('캔들 차트 데이터 요청 실패:', error.message)
       res.writeHead(502, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: '캔들 차트 데이터를 가져오지 못했습니다.' }))
+    }
+    return
+  }
+
+  // Order Block Detection + Lifecycle 전용. 캔들 데이터는 새로 수집하지 않고, 캔들 차트(위
+  // candlesMatch)와 완전히 동일한 getChartCandles(code, interval)를 그대로 재사용한다 -
+  // 사용자가 차트에서 고른 timeframe 그대로 Order Block을 계산한다
+  // (docs/trading-rules/order-block.md의 Timeframe Rule). detectOrderBlocks(server/orderBlock.js)가
+  // 기대하는 필드(open/high/low/close/timestamp)만 계산 직전에 뽑아 넘기고, 기존 /candles
+  // 응답 형태(date/volume 포함)는 건드리지 않는다.
+  // 순서: 캔들 조회 -> detectOrderBlocks(Detection, 규칙 2·3·15·16·17·18절) ->
+  // resolveOrderBlockLifecycle(Lifecycle, 규칙 9·10·11·12·19절) -> 응답. 두 함수 모두 이미
+  // 검증된 그대로 호출만 하고, OB 판정/생명주기 규칙을 이 파일에 다시 구현하지 않는다.
+  const orderBlocksMatch = url.pathname.match(/^\/api\/stock\/([A-Za-z0-9.-]+)\/order-blocks$/)
+
+  if (req.method === 'GET' && orderBlocksMatch) {
+    const code = orderBlocksMatch[1]
+    const interval = url.searchParams.get('interval') ?? ''
+
+    if (!isSupportedChartTimeframe(interval)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: `지원하지 않는 시간봉입니다: ${interval}` }))
+      return
+    }
+
+    try {
+      const candles = await getChartCandles(code, interval)
+      const orderBlockInput = candles.map((candle) => ({
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        timestamp: candle.timestamp,
+      }))
+      const detected = detectOrderBlocks(orderBlockInput)
+      const orderBlocks = resolveOrderBlockLifecycle(detected, orderBlockInput)
+      // 문서 12절: 방향과 무관하게 가장 최근에 생성된 유효 OB 하나만 활성 상태다 - lifecycle이
+      // 이미 그 규칙을 적용해 최대 1개만 status:'active'로 표시하므로 그중 하나를 그대로 꺼낸다.
+      const activeOrderBlock = orderBlocks.find((ob) => ob.status === 'active') ?? null
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ orderBlocks, activeOrderBlock }))
+    } catch (error) {
+      console.error('Order Block 탐지 실패:', error.message)
+      res.writeHead(502, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Order Block 탐지에 실패했습니다.' }))
     }
     return
   }

@@ -406,6 +406,46 @@ function App() {
     }
   }, [selectedStock, candleTimeframe])
 
+  const [orderBlockStatus, setOrderBlockStatus] = useState('idle') // idle | loading | success | error
+  const [activeOrderBlock, setActiveOrderBlock] = useState(null)
+
+  // Order Block도 캔들 차트와 동일한 "종목 + 선택된 timeframe" 조합으로 요청한다
+  // (docs/trading-rules/order-block.md의 Timeframe Rule - 특정 timeframe에 고정하지 않음).
+  // 서버(GET /order-blocks)가 Detection + Lifecycle을 이미 계산해서 activeOrderBlock
+  // 하나만 골라주므로, 여기서는 그 값을 그대로 state에 담아 CandleChart에 전달만 한다.
+  useEffect(() => {
+    if (!selectedStock || selectedStock.status === 'error') {
+      setOrderBlockStatus('idle')
+      setActiveOrderBlock(null)
+      return
+    }
+
+    const code = selectedStock.code
+    const requestedTimeframe = candleTimeframe
+
+    let cancelled = false
+    setOrderBlockStatus('loading')
+    setActiveOrderBlock(null)
+
+    fetch(`/api/stock/${code}/order-blocks?interval=${requestedTimeframe}`)
+      .then((response) => {
+        if (!response.ok) throw new Error('Order Block 조회 실패')
+        return response.json()
+      })
+      .then((data) => {
+        if (cancelled) return
+        setActiveOrderBlock(data.activeOrderBlock ?? null)
+        setOrderBlockStatus('success')
+      })
+      .catch(() => {
+        if (!cancelled) setOrderBlockStatus('error')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedStock, candleTimeframe])
+
   const [goldenCrossStatus, setGoldenCrossStatus] = useState('idle') // idle | loading | success | error
   const [goldenCrossData, setGoldenCrossData] = useState(null)
 
@@ -950,6 +990,7 @@ function App() {
                           candles={candleData.candles}
                           ma={candleData.ma}
                           timeframe={candleData.timeframe}
+                          activeOrderBlock={orderBlockStatus === 'success' ? activeOrderBlock : null}
                         />
                       )}
                     </div>
