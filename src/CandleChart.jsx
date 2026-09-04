@@ -17,12 +17,16 @@ const DOWN_COLOR = '#6ea8fe'
 // 같은 색을 쓰면 겹치는 캔들·꼬리·이동평균선 사이에서 묻혀 안 보이는 문제가 있었다(실측 확인:
 // obHigh~obLow 폭이 좁은 OB는 얇은 파란 테두리가 파란 캔들/청록 MA20 라인과 사실상 구분 불가).
 // 그래서 OB만은 캔들과 다른, 국제적으로 통용되는 상승=초록/하락=빨강 계열을 쓴다 - bullish/
-// bearish가 한눈에 구분되면서도 기존 캔들 색과는 섞이지 않는다. 초록은 이미 이동평균선(MA20,
-// chartColors.js MA_COLORS[20])이 쓰는 색을 그대로 재사용해 팔레트를 불필요하게 늘리지 않는다.
-const OB_BULLISH_FILL = 'rgba(74, 222, 128, 0.12)'
-const OB_BULLISH_BORDER = 'rgba(74, 222, 128, 0.95)'
-const OB_BEARISH_FILL = 'rgba(239, 68, 68, 0.12)'
-const OB_BEARISH_BORDER = 'rgba(239, 68, 68, 0.95)'
+// bearish가 한눈에 구분되면서도 기존 캔들 색과는 섞이지 않는다. fill은 캔들/이동평균선을
+// 가리지 않을 정도의 낮은 불투명도, border는 완전 불투명(1.0 - 더 진하게 할 수 없는 최댓값)으로
+// 얇은 OB(실측 시 obHigh~obLow가 화면에서 1~2px밖에 안 되는 경우도 있음)도 경계가 뚜렷이
+// 보이도록 한다. fill 불투명도는 박스가 오른쪽으로 pane 끝까지 넓게 퍼지는 점을 고려해
+// (차트를 과하게 가리지 않게) 살짝만 올렸다 - 순수 시각 표현 조정이며 obHigh/obLow 좌표에는
+// 영향 없음.
+const OB_BULLISH_FILL = 'rgba(74, 222, 128, 0.22)'
+const OB_BULLISH_BORDER = 'rgba(34, 197, 94, 1)'
+const OB_BEARISH_FILL = 'rgba(239, 68, 68, 0.22)'
+const OB_BEARISH_BORDER = 'rgba(220, 38, 38, 1)'
 
 const MA_PERIODS = [5, 20, 60, 120]
 
@@ -162,9 +166,30 @@ export default function CandleChart({ candles, ma, timeframe, activeOrderBlock }
 
   // Order Block 박스: activeOrderBlock 하나만 표시한다(과거 OB, 진입선, stopLoss는 이번
   // 단계에서 다루지 않는다). 박스 상/하단은 반드시 obHigh/obLow만 쓴다(wick 절대 사용 금지 -
-  // docs/trading-rules/order-block.md 1절). 시작 시간은 activeOrderBlock.startTime, 종료
-  // 시간은 "현재 로드된 캔들 중 가장 최근 캔들"의 시각으로 고정한다(active 상태이므로 미래
-  // 시간을 임의로 만들지 않는다).
+  // docs/trading-rules/order-block.md 1절, obHigh/obLow 값 자체는 여기서 전혀 바꾸지 않는다).
+  // 차트의 visible range/zoom은 이 effect가 절대 건드리지 않는다 - primitive는 이미 그려진
+  // 차트 좌표를 읽기만 한다.
+  //
+  // 왼쪽 경계: 박스는 "OB가 된 캔들 자체"의 전체 폭만 처음부터 포함한다 - 그보다 한 캔들 더
+  // 과거로 확장하지 않는다. activeOrderBlock.startTime은 서버가 확정한 시점(engulfing한
+  // 캔들의 시각 - server/orderBlock.js buildOrderBlock/buildDoubleOrderBlock의 time)이고,
+  // 실제 OB 가격 영역(obHigh/obLow)은 그 바로 이전 캔들의 몸통이다(일반 OB는 engulfing 당한
+  // 캔들, 이중장악형은 Candle2 - 문서 2·3·15·16절). candles 배열에서 그 "OB가 된 캔들"
+  // (obCandleIndex = confirmIndex - 1)을 anchor로 그대로 쓰고, spacing 계산용으로만 그 바로
+  // 다음 캔들(engulfing 캔들 자신)을 함께 넘긴다. 왼쪽 경계 좌표(x1)는 OrderBlockBoxPrimitive가
+  // anchor 캔들 중심 좌표에서 두 캔들 간격(현재 zoom의 실제 캔들 간격)의 절반만큼 왼쪽으로
+  // 뺀 값으로 계산한다 - anchor 캔들의 시간 좌표(=캔들 중심)를 그대로 x1로 쓰면 그 캔들을
+  // 절반만 덮고 시작하기 때문이다.
+  //
+  // 오른쪽 경계: 특정 캔들(예: 마지막 캔들)에 맞추지 않고 OrderBlockBoxPrimitive가 매 프레임
+  // pane의 실제 렌더 폭까지 그린다(TradingView의 zone extend 표현 - 자세한 계산은
+  // OrderBlockBoxPrimitive.js 참고). 그래서 여기서는 오른쪽 끝 관련 값을 계산하지 않는다.
+  // 미래의 가짜 캔들/timestamp를 만드는 것도 아니고, 차트 scale/visible range도 건드리지 않는다.
+  //
+  // (참고: lightweight-charts.timeScale().logicalToCoordinate()에 정수가 아닌 logical
+  // index를 넘기면 좌표를 계산하지 않고 0을 반환한다 - 이전 시도에서 이 방식을 썼다가 모든
+  // OB 박스의 왼쪽 경계가 차트 맨 왼쪽에 고정되는 버그가 났다. 그래서 정수 logical index
+  // 대신, 항상 정수 인덱스로 귀결되는 timeToCoordinate(각 캔들의 실제 시각) 호출로만 계산한다.)
   useEffect(() => {
     const primitive = orderBlockPrimitiveRef.current
     if (!primitive) return
@@ -177,16 +202,30 @@ export default function CandleChart({ candles, ma, timeframe, activeOrderBlock }
         return
       }
 
+      // confirmIndex: engulfing 캔들(OB를 확정지은 캔들)의 candles 배열 내 위치.
+      // obCandleIndex: 실제 OB 가격 영역(obHigh/obLow)이 된 캔들 그 자체 - 박스는 반드시
+      // 이 캔들의 왼쪽 edge에서 시작해야 하고, 그보다 한 칸 더 앞(confirmIndex - 2)을 쓰지 않는다.
+      // confirmIndex는 항상 candles 안에서 찾을 수 있어야 한다(같은 API 응답의 candles/
+      // activeOrderBlock이므로) - 못 찾으면 좌표를 신뢰할 수 없으므로 박스를 그리지 않는다.
+      const confirmIndex = candles.findIndex((c) => c.timestamp === activeOrderBlock.startTime)
+      if (confirmIndex < 1) {
+        primitive.setOrderBlock(null)
+        return
+      }
+
       const isBullishFamily = activeOrderBlock.type === 'bullish' || activeOrderBlock.type === 'bullish-double'
-      const lastCandle = candles[candles.length - 1]
+      const obCandleIndex = confirmIndex - 1
+      // spacing 계산에만 쓰는 인접 캔들(obCandleIndex + 1 = engulfing 캔들 자신 = confirmIndex).
+      const neighborIndex = confirmIndex
 
       primitive.setOrderBlock({
-        startTime: toChartTime(activeOrderBlock.startTime, timeframe),
-        endTime: toChartTime(lastCandle.timestamp, timeframe),
+        startAnchorTime: toChartTime(candles[obCandleIndex].timestamp, timeframe),
+        startNeighborTime: toChartTime(candles[neighborIndex].timestamp, timeframe),
         obHigh: activeOrderBlock.obHigh,
         obLow: activeOrderBlock.obLow,
         fillColor: isBullishFamily ? OB_BULLISH_FILL : OB_BEARISH_FILL,
         borderColor: isBullishFamily ? OB_BULLISH_BORDER : OB_BEARISH_BORDER,
+        label: isBullishFamily ? '상승 OB' : '하락 OB',
       })
     } catch (error) {
       console.error('Order Block 박스 갱신 실패 (차트의 나머지 부분은 계속 표시됩니다):', error)
