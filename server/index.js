@@ -6,6 +6,7 @@ import { getChartCandles, isSupportedChartTimeframe } from './chartCandles.js'
 import { calculateMovingAverages } from './movingAverage.js'
 import { detectOrderBlocks } from './orderBlock.js'
 import { resolveOrderBlockLifecycle } from './orderBlockLifecycle.js'
+import { getBreakoutResponse } from './breakoutFeed.js'
 
 const PORT = 3001
 
@@ -310,6 +311,21 @@ const server = createServer(async (req, res) => {
       res.writeHead(502, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: 'Order Block 탐지에 실패했습니다.' }))
     }
+    return
+  }
+
+  // 돌파매매(trading-rules/breakout.md) 전용. 캔들 데이터는 새로 수집하지 않고, 캔들 차트/Order
+  // Block과 완전히 동일한 getChartCandles(code, interval)를 그대로 재사용한다(breakoutFeed.js).
+  // 이 라우트는 응답 조립(statusCode/body)을 breakoutFeed.js에 전부 위임하고, 여기서는 URL
+  // 파싱과 res.writeHead/res.end만 담당한다 - breakout.js의 매매 판정 로직은 건드리지 않는다.
+  const breakoutMatch = url.pathname.match(/^\/api\/stock\/([A-Za-z0-9.-]+)\/breakout$/)
+
+  if (req.method === 'GET' && breakoutMatch) {
+    const code = breakoutMatch[1]
+    const interval = url.searchParams.get('interval') ?? ''
+    const { statusCode, body } = await getBreakoutResponse(code, interval)
+    res.writeHead(statusCode, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(body))
     return
   }
 

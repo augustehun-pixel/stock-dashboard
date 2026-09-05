@@ -5,8 +5,10 @@
 //
 // data.js도, fourHourCandles.js도 건드리지 않는다 - 상세 차트 전용 새 파일이다.
 
-const SESSION_START_MINUTE = 9 * 60 // 09:00
-const SESSION_END_MINUTE = 15 * 60 + 30 // 15:30
+// export: breakoutFeed.js가 "미완성 캔들 필터링"에 정규장 경계를 그대로 재사용하기 위해
+// 노출한다(값/로직 변경 없음, 가시성만 추가).
+export const SESSION_START_MINUTE = 9 * 60 // 09:00
+export const SESSION_END_MINUTE = 15 * 60 + 30 // 15:30
 
 function resolveBucketStartMinute(timestamp, bucketMinutes) {
   const hour = Number(timestamp.slice(11, 13))

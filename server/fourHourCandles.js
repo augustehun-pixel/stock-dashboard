@@ -12,7 +12,9 @@
 // timestamp는 항상 "YYYY-MM-DDTHH:mm:ss.sss+09:00" 형식으로 온다(실제 응답으로 확인함).
 // new Date().getHours()는 서버 실행 환경의 시간대에 따라 달라질 수 있어 위험하므로,
 // 문자열에서 시:분을 직접 잘라내 KST 기준 시각을 안전하게 구한다.
-const SESSIONS = [
+// export: breakoutFeed.js가 "미완성 캔들 필터링"에 4시간봉 AM/PM 세션 경계를 그대로
+// 재사용하기 위해 노출한다(값/로직 변경 없음, 가시성만 추가).
+export const SESSIONS = [
   { label: 'AM', startMinute: 9 * 60, endMinute: 13 * 60 - 1 }, // 09:00 ~ 12:59
   { label: 'PM', startMinute: 13 * 60, endMinute: 15 * 60 + 30 }, // 13:00 ~ 15:30
 ]

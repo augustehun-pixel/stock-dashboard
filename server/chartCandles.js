@@ -186,7 +186,9 @@ export function isSupportedChartTimeframe(timeframe) {
 // 경계는 건드리지 않고(공유 로직 변경 금지), 차트에 보여줄 PM 캔들만 이 마감 동시호가
 // 체결가로 보정한다.
 const SHARED_PM_SESSION_END_MINUTE = 15 * 60 + 30 // 15:30 (fourHourCandles.js와 동일)
-const CLOSING_AUCTION_MINUTE = 15 * 60 + 31 // 15:31 (실측 확인)
+// export: breakoutFeed.js가 "미완성 캔들 필터링"에 이 실측 확인된 마감 동시호가 지연을
+// 그대로 재사용하기 위해 노출한다(값/로직 변경 없음, 가시성만 추가).
+export const CLOSING_AUCTION_MINUTE = 15 * 60 + 31 // 15:31 (실측 확인)
 
 // date(YYYY-MM-DD) -> 그날 마감 동시호가 체결 1분봉. minuteCandles 전체를 한 번만 훑어서
 // (930, 931] 구간에 걸리는 캔들만 날짜별로 모아둔다(4시간봉 개수만큼 매번 훑지 않기 위함).
